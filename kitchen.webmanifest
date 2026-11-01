@@ -1,0 +1,12 @@
+{
+  "name": "SBK Kitchen",
+  "short_name": "SBK Kitchen",
+  "start_url": "./admin.html",
+  "display": "browser",
+  "background_color": "#3A220F",
+  "theme_color": "#3A220F",
+  "icons": [
+    {"src": "img/icons/kitchen-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "img/icons/kitchen-512.png", "sizes": "512x512", "type": "image/png"}
+  ]
+}
