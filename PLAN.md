@@ -45,6 +45,18 @@ Orders as they arrive, mark paid or picked up, a "what to bake" total, and open/
 - Test on a real iPhone (Safari) and a real Android phone (Chrome).
 - Soft launch with a few friends on the test URL.
 
+## Where we left off (Nov 1, 2026)
+- ✅ Phase 1 is done and rush-tested. Phase 2's test page is online at https://sourdoughbykat.github.io/sbk-order-v2/ and uses the TEST copy of the sheet.
+- The live shop is untouched. The switch-over plan is to replace the live page in place, between drops, after Monday's pickup.
+- Decisions for next time:
+  1. **Domain:** buy your own domain (recommended) or use a free `*.pages.dev` address
+  2. **Security hardening:**
+     - You do: 2-step verification on Google and GitHub; check sheet sharing (only Kat and you as editors, link sharing off)
+     - Code: limit open orders per phone per drop, check phone numbers, cap request size, dedupe the waitlist, `@OnlyCurrentDoc`, clear real customer rows from the TEST copy
+     - Optional: Cloudflare Turnstile anti-bot check (needs a free Cloudflare account)
+     - Skip unless needed: a rate-limiting gateway
+  3. **Optional:** Kat's baker page (mark paid, picked up, complete)
+
 ## Open questions
 - [ ] Is Kat's baker view in v1?
 - [ ] Hosting and domain: a free test URL now, a custom domain later?
