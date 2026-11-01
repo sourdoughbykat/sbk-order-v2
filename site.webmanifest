@@ -1,12 +1,20 @@
 {
   "name": "Sourdough by Kat",
-  "short_name": "Sourdough",
+  "short_name": "SBK",
   "start_url": "./",
   "display": "browser",
   "background_color": "#FAF6F0",
   "theme_color": "#743D13",
   "icons": [
-    {"src": "img/icons/shop-192.png", "sizes": "192x192", "type": "image/png"},
-    {"src": "img/icons/shop-512.png", "sizes": "512x512", "type": "image/png"}
+    {
+      "src": "img/icons/shop-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "img/icons/shop-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
   ]
 }
