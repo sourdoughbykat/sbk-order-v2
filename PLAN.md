@@ -41,6 +41,7 @@ Orders as they arrive, mark paid or picked up, a "what to bake" total, and open/
 
 ### 4. Testing before switching over
 - Send 20+ simultaneous orders. Stock must never go below zero and order numbers must never repeat.
+  - ✅ Nov 1, 2026, on the TEST copy: 25 at once. All 11 places filled with no repeated numbers and no oversold stock or slots. The other 14 were correctly told their slot was full, nobody was left on "busy", and the slowest wait was 22.5 s.
 - Test on a real iPhone (Safari) and a real Android phone (Chrome).
 - Soft launch with a few friends on the test URL.
 
