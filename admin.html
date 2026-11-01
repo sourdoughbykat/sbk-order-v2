@@ -456,7 +456,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
     $("slotList").innerHTML = slots.length ? slots.map(s =>
       '<div class="item" data-id="' + esc(s.slot_id) + '"><div class="edit" style="grid-template-columns:2fr 1fr 1fr">' +
         field("Pickup time", "pickup_time", s.pickup_time, "text", "name") + field("Max orders", "max_orders", s.max_orders, "number") + field("Sort", "sort", s.sort, "number") +
-        '</div></div>').join("") : '<p class="muted">No pickup times yet.</p>';
+        '</div><div class="row" style="justify-content:flex-end;margin-top:6px"><button type="button" class="btn link small" data-remove-slot="' + esc(s.slot_id) + '">Remove this pickup time</button></div></div>').join("") : '<p class="muted">No pickup times yet. Customers can\'t check out until you add one.</p>';
     /* Remember what each row looked like, so Save only sends the rows that changed */
     document.querySelectorAll("#itemList [data-id], #slotList [data-id]").forEach(r => r.dataset.orig = JSON.stringify(form(r)));
   }
@@ -491,6 +491,23 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
     const name = prompt("New item name"); if(!name) return;
     const drop = $("menuDropPick").value, id = slug(name) || ("item-" + Date.now());
     await run(sb.from("menu_items").insert({menu_id: drop, item_id: id, name, price: 0, available: 0, show: false, sort: 99}), "Added. Set its price and stock, then tick Show.").catch(() => {});
+    loadMenu();
+  });
+  /* Remove a pickup time. Orders already booked for it keep their pickup time; it just can't be chosen anymore. */
+  $("slotList").addEventListener("click", async e => {
+    const b = e.target.closest("[data-remove-slot]"); if(!b) return;
+    const menu = $("menuDropPick").value, id = b.dataset.removeSlot, row = b.closest("[data-id]");
+    const label = row.querySelector('[name="pickup_time"]').value || id;
+    const unsaved = [...$("slotList").querySelectorAll("[data-id]")].some(r => r !== row && JSON.stringify(form(r)) !== r.dataset.orig);
+    if(unsaved && !confirm("You have unsaved changes to other pickup times. Removing this one will undo them. Continue?")) return;
+    const booked = await run(sb.from("orders").select("order_num").eq("menu_id", menu).eq("slot_id", id).neq("status", "Canceled").is("archived_at", null));
+    const last = $("slotList").querySelectorAll("[data-id]").length === 1;
+    let msg = "Remove the pickup time “" + label + "”?";
+    if(booked.length) msg += "\n\n" + booked.length + " active order" + (booked.length === 1 ? " is" : "s are") + " booked for it. They keep this pickup time; new customers just can't pick it.";
+    if(last) msg += "\n\nThis is the last pickup time on this menu. Customers can't check out until you add another.";
+    if(!confirm(msg)) return;
+    b.disabled = true;
+    await run(sb.from("slots").delete().eq("menu_id", menu).eq("slot_id", id), "Removed “" + label + "”").catch(() => { b.disabled = false; });
     loadMenu();
   });
   $("addSlot").addEventListener("click", async () => {
