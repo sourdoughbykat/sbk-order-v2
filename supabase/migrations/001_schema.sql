@@ -232,7 +232,7 @@ declare
   v_total numeric(10,2) := 0;
   v_summary text := '';
   v_wanted jsonb := '[]'::jsonb;
-  w       jsonb;
+  v_w     jsonb;
 begin
   if v_key = '' then return public.fail('Refresh the page and try again.', true); end if;
   if v_name = '' or v_phone = '' or v_slot = '' then
@@ -275,17 +275,17 @@ begin
   if v_taken >= sl.max_orders then return public.fail(sl.pickup_time || ' just filled up. Choose another pickup time.', true); end if;
 
   -- Lock each item (in a fixed order, so two orders never wait on each other) and check stock.
-  for w in select value from jsonb_array_elements(v_wanted) order by value ->> 'id' loop
+  for v_w in select value from jsonb_array_elements(v_wanted) order by value ->> 'id' loop
     select * into it from public.menu_items
-     where drop_id = v_drop and item_id = w ->> 'id' and show for update;
+     where drop_id = v_drop and item_id = v_w ->> 'id' and show for update;
     if not found then return public.fail('Something on your order isn''t on the menu anymore.', true); end if;
-    if (w ->> 'qty')::int > it.available then
+    if (v_w ->> 'qty')::int > it.available then
       return public.fail(case when it.available > 0
         then 'Only ' || it.available || ' ' || it.name || ' left. Adjust your order and try again.'
         else it.name || ' just sold out. Adjust your order and try again.' end, true);
     end if;
-    v_total := v_total + it.price * (w ->> 'qty')::int;
-    v_summary := v_summary || case when v_summary = '' then '' else ', ' end || (w ->> 'qty') || ' x ' || it.name;
+    v_total := v_total + it.price * (v_w ->> 'qty')::int;
+    v_summary := v_summary || case when v_summary = '' then '' else ', ' end || (v_w ->> 'qty') || ' x ' || it.name;
   end loop;
 
   insert into public.orders (order_key, drop_id, drop_name, customer_name, phone, slot_id, pickup, items_summary, total, payment)
@@ -293,13 +293,13 @@ begin
   returning order_num into v_num;
 
   insert into public.order_lines (order_num, drop_id, item_id, item_name, qty, price)
-  select v_num, v_drop, i.item_id, i.name, (w ->> 'qty')::int, i.price
+  select v_num, v_drop, i.item_id, i.name, (w.value ->> 'qty')::int, i.price
     from jsonb_array_elements(v_wanted) w
-    join public.menu_items i on i.drop_id = v_drop and i.item_id = w ->> 'id';
+    join public.menu_items i on i.drop_id = v_drop and i.item_id = w.value ->> 'id';
 
-  update public.menu_items i set available = i.available - (w ->> 'qty')::int
+  update public.menu_items i set available = i.available - (w.value ->> 'qty')::int
     from jsonb_array_elements(v_wanted) w
-   where i.drop_id = v_drop and i.item_id = w ->> 'id';
+   where i.drop_id = v_drop and i.item_id = w.value ->> 'id';
 
   return public.order_receipt(v_num);
 exception
