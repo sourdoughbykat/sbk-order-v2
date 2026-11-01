@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>SBK Baker</title>
+<meta name="robots" content="noindex, nofollow">
+<meta name="theme-color" content="#743D13">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,700;9..144,800&family=Manrope:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#EFE8DF; --card:#FFFDF9; --ink:#3A220F; --muted:#8C7765; --line:#E6DACB; --soft:#F2E9DD;
+  --solid:#743D13; --on-solid:#FFF8EE; --ok:#2F7D55; --ok-soft:#DDF0E5; --warn-soft:#FBEFC4; --bad:#B93A33;
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --bg:#17110C; --card:#261D16; --ink:#F6ECDF; --muted:#B19C88; --line:#3A2E24; --soft:#33281F;
+    --solid:#E7CFAE; --on-solid:#2A1A0C; --ok:#7FD3A6; --ok-soft:#1F3B2E; --warn-soft:#4A3F1E; --bad:#F0857D;
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#17110C; --card:#261D16; --ink:#F6ECDF; --muted:#B19C88; --line:#3A2E24; --soft:#33281F;
+  --solid:#E7CFAE; --on-solid:#2A1A0C; --ok:#7FD3A6; --ok-soft:#1F3B2E; --warn-soft:#4A3F1E; --bad:#F0857D;
+  color-scheme:dark;
+}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 "Manrope",system-ui,-apple-system,sans-serif;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+[hidden]{display:none!important}
+.wrap{max-width:860px;margin:0 auto;padding:calc(16px + env(safe-area-inset-top,0px)) 16px calc(40px + env(safe-area-inset-bottom,0px))}
+h1{font-family:"Fraunces",Georgia,serif;font-weight:800;font-size:26px;margin:0;letter-spacing:-.01em}
+h2{font-size:17px;font-weight:800;margin:0 0 10px}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:14px}
+.who{color:var(--muted);font-size:13px;font-weight:600;text-align:right}
+.who button{border:0;background:none;color:var(--solid);font-weight:700;padding:0;text-decoration:underline}
+.card{background:var(--card);border-radius:20px;padding:16px;margin-bottom:12px}
+.tabs{display:flex;gap:6px;overflow-x:auto;margin:0 0 14px;scrollbar-width:none}
+.tabs button{flex:0 0 auto;border:0;background:var(--card);border-radius:999px;padding:9px 16px;font-weight:700}
+.tabs button[aria-selected="true"]{background:var(--solid);color:var(--on-solid)}
+.btn{border:0;border-radius:14px;background:var(--solid);color:var(--on-solid);padding:11px 16px;font-weight:800}
+.btn.ghost{background:var(--soft);color:var(--ink)}
+.btn.small{padding:7px 12px;border-radius:10px;font-size:13px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.in{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:12px;background:var(--bg);font-size:16px}
+label.f{display:block;font-weight:700;font-size:13px;margin:10px 0 4px}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.muted{color:var(--muted)}
+.err{color:var(--bad);font-weight:600;font-size:14px;margin:8px 0 0}
+.toast{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 16px;border-radius:12px;font-weight:700;font-size:14px;z-index:9;max-width:calc(100% - 32px)}
+.stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:12px}
+@media (max-width:560px){.stats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.stat{background:var(--card);border-radius:16px;padding:12px}
+.stat b{display:block;font-size:22px;font-weight:800}
+.stat span{color:var(--muted);font-size:12px;font-weight:600}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
+.bar select{width:auto}
+.order{background:var(--card);border-radius:18px;padding:14px 16px;margin-bottom:10px}
+.order.canceled{opacity:.6}
+.o-head{display:flex;justify-content:space-between;gap:8px;align-items:baseline;flex-wrap:wrap}
+.o-head b{font-size:16px}
+.badge{font-size:12px;font-weight:800;padding:3px 9px;border-radius:999px;background:var(--warn-soft)}
+.badge.Paid{background:var(--ok-soft);color:var(--ok)}
+.badge.Picked{background:var(--soft)}
+.badge.Canceled{background:transparent;border:1.5px solid var(--bad);color:var(--bad)}
+.o-sub{color:var(--muted);font-size:13px;font-weight:600;margin-top:2px}
+.o-sub a{color:inherit}
+.o-items{margin:8px 0;font-weight:600}
+.o-acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+table{width:100%;border-collapse:collapse}
+th,td{text-align:left;padding:8px 4px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+td.num,th.num{text-align:right}
+.edit{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+@media (max-width:560px){.edit{grid-template-columns:1fr}}
+.edit .full{grid-column:1/-1}
+.item{border-top:1px solid var(--line);padding:12px 0}
+.item:first-of-type{border-top:0;padding-top:0}
+.item .edit{grid-template-columns:2fr 1fr 1fr}
+@media (max-width:560px){.item .edit{grid-template-columns:1fr 1fr}.item .edit .name{grid-column:1/-1}}
+.chk{display:flex;align-items:center;gap:8px;font-weight:700;margin:10px 0 0}
+.chk input{width:20px;height:20px}
+.login{max-width:420px;margin:12vh auto 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <section class="login card" id="loginView" hidden>
+    <h1>SBK Baker</h1>
+    <p class="muted">Sign in with your email. We'll send you a link, so there's no password to remember.</p>
+    <form id="loginForm">
+      <label class="f" for="email">Email</label>
+      <input class="in" id="email" type="email" autocomplete="email" required>
+      <p class="err" id="loginErr" hidden></p>
+      <button class="btn" id="loginBtn" style="width:100%;margin-top:14px">Email me a sign-in link</button>
+    </form>
+    <p id="loginSent" hidden><b>Check your email.</b> Open the link on this device to sign in.</p>
+  </section>
+
+  <section class="login card" id="deniedView" hidden>
+    <h1>Not on the list</h1>
+    <p class="muted">This email isn't allowed into the baker page.</p>
+    <button class="btn ghost" data-signout>Sign out</button>
+  </section>
+
+  <div id="appView" hidden>
+    <header class="top">
+      <h1>SBK Baker</h1>
+      <div class="who"><span id="whoEmail"></span><br><button data-signout>Sign out</button></div>
+    </header>
+    <nav class="tabs" role="tablist">
+      <button role="tab" data-tab="orders" aria-selected="true">Orders</button>
+      <button role="tab" data-tab="bake" aria-selected="false">To bake</button>
+      <button role="tab" data-tab="menu" aria-selected="false">Menu &amp; slots</button>
+      <button role="tab" data-tab="settings" aria-selected="false">Shop settings</button>
+    </nav>
+
+    <section data-panel="orders">
+      <div class="bar">
+        <select class="in" id="dropPick" aria-label="Drop"></select>
+        <select class="in" id="statusPick" aria-label="Show">
+          <option value="active">Active orders</option>
+          <option value="Awaiting payment">Awaiting payment</option>
+          <option value="Paid">Paid</option>
+          <option value="Picked up">Picked up</option>
+          <option value="Canceled">Canceled</option>
+          <option value="archived">Archived</option>
+        </select>
+        <button class="btn ghost small" id="refresh">Refresh</button>
+      </div>
+      <div class="stats" id="stats"></div>
+      <div id="orderList"></div>
+      <button class="btn ghost" id="archiveBtn" style="width:100%">Archive picked-up and canceled orders for this drop</button>
+    </section>
+
+    <section data-panel="bake" hidden>
+      <div class="card"><h2>To bake</h2><p class="muted" style="margin-top:-4px">Everything on orders that aren't canceled or archived.</p><div id="bakeList"></div></div>
+    </section>
+
+    <section data-panel="menu" hidden>
+      <div class="bar">
+        <select class="in" id="menuDropPick" aria-label="Drop"></select>
+        <button class="btn ghost small" id="newDrop">+ New drop</button>
+      </div>
+      <div class="card" id="dropCard"></div>
+      <div class="card"><h2>Menu items</h2><div id="itemList"></div><button class="btn ghost small" id="addItem" style="margin-top:10px">+ Add item</button></div>
+      <div class="card"><h2>Pickup times</h2><div id="slotList"></div><button class="btn ghost small" id="addSlot" style="margin-top:10px">+ Add pickup time</button></div>
+    </section>
+
+    <section data-panel="settings" hidden>
+      <div class="card" id="settingsCard"></div>
+    </section>
+  </div>
+</div>
+<div class="toast" id="toast" hidden></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<script>
+/* Same Supabase project as the customer page. The key is the public one; Kat's sign-in decides what she can see. */
+const SUPABASE_URL = "https://alowjwrdumbuqnoryhre.supabase.co";
+const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
+
+(function(){
+  const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+  const $ = id => document.getElementById(id);
+  const esc = s => String(s == null ? "" : s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+  const money = n => "$" + Number(n).toFixed(Number(n) % 1 ? 2 : 0);
+  const when = t => new Date(t).toLocaleString([], {weekday:"short", month:"short", day:"numeric", hour:"numeric", minute:"2-digit"});
+  let drops = [], tab = "orders", pollT;
+
+  function toast(msg){ const t = $("toast"); t.textContent = msg; t.hidden = false; clearTimeout(toast.t); toast.t = setTimeout(() => t.hidden = true, 2600); }
+  async function run(q, okMsg){ const {data, error} = await q; if(error){ toast("Didn't save: " + error.message); throw error; } if(okMsg) toast(okMsg); return data; }
+
+  /* ---------- Sign-in ---------- */
+  function show(view){ ["loginView","deniedView","appView"].forEach(v => $(v).hidden = v !== view); }
+  async function start(){
+    const {data:{session}} = await sb.auth.getSession();
+    if(!session){ show("loginView"); return; }
+    const {data:isAdmin} = await sb.rpc("is_admin");
+    if(!isAdmin){ show("deniedView"); return; }
+    $("whoEmail").textContent = session.user.email;
+    show("appView");
+    await loadDrops();
+    openTab(tab);
+  }
+  $("loginForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    const email = $("email").value.trim().toLowerCase(), btn = $("loginBtn");
+    btn.disabled = true; btn.textContent = "Sending…"; $("loginErr").hidden = true;
+    const {error} = await sb.auth.signInWithOtp({email, options:{emailRedirectTo: location.origin + location.pathname}});
+    btn.disabled = false; btn.textContent = "Email me a sign-in link";
+    if(error){ $("loginErr").textContent = error.message; $("loginErr").hidden = false; return; }
+    $("loginForm").hidden = true; $("loginSent").hidden = false;
+  });
+  document.addEventListener("click", async e => { if(e.target.closest("[data-signout]")){ await sb.auth.signOut(); location.reload(); } });
+  sb.auth.onAuthStateChange((ev) => { if(ev === "SIGNED_IN" && $("appView").hidden) start(); });
+
+  /* ---------- Tabs ---------- */
+  document.querySelector(".tabs").addEventListener("click", e => { const b = e.target.closest("[data-tab]"); if(b) openTab(b.dataset.tab); });
+  function openTab(name){
+    tab = name;
+    document.querySelectorAll("[data-tab]").forEach(b => b.setAttribute("aria-selected", String(b.dataset.tab === name)));
+    document.querySelectorAll("[data-panel]").forEach(p => p.hidden = p.dataset.panel !== name);
+    clearInterval(pollT);
+    if(name === "orders"){ loadOrders(); pollT = setInterval(() => { if(!document.hidden) loadOrders(true); }, 30000); }
+    if(name === "bake") loadBake();
+    if(name === "menu") loadMenu();
+    if(name === "settings") loadSettings();
+  }
+
+  async function loadDrops(){
+    drops = await run(sb.from("drops").select("*").order("sort").order("id"));
+    const open = drops.find(d => d.taking_orders) || drops[0];
+    const opts = drops.map(d => '<option value="' + esc(d.id) + '">' + esc(d.name) + (d.taking_orders ? " (open)" : "") + '</option>').join("");
+    [$("dropPick"), $("menuDropPick")].forEach(sel => { const prev = sel.value; sel.innerHTML = opts; sel.value = drops.some(d => d.id === prev) ? prev : (open ? open.id : ""); });
+  }
+
+  /* ---------- Orders ---------- */
+  ["dropPick","statusPick"].forEach(id => $(id).addEventListener("change", () => loadOrders()));
+  $("refresh").addEventListener("click", () => loadOrders());
+  async function loadOrders(quiet){
+    const drop = $("dropPick").value, view = $("statusPick").value;
+    if(!drop){ $("orderList").innerHTML = '<p class="card muted">No drops yet. Add one under Menu &amp; slots.</p>'; return; }
+    let q = sb.from("orders").select("*").eq("drop_id", drop).order("order_num", {ascending:false});
+    q = view === "archived" ? q.not("archived_at", "is", null) : q.is("archived_at", null);
+    if(view !== "active" && view !== "archived") q = q.eq("status", view);
+    const {data:orders, error} = await q;
+    if(error){ if(!quiet) toast("Couldn't load orders: " + error.message); return; }
+    const all = view === "active" ? orders : null;
+    if(all){
+      const live = all.filter(o => o.status !== "Canceled");
+      const paid = live.filter(o => o.status !== "Awaiting payment").reduce((s,o) => s + Number(o.total), 0);
+      const owed = live.filter(o => o.status === "Awaiting payment").reduce((s,o) => s + Number(o.total), 0);
+      $("stats").innerHTML =
+        '<div class="stat"><b>' + live.length + '</b><span>Orders</span></div>' +
+        '<div class="stat"><b>' + money(paid) + '</b><span>Paid</span></div>' +
+        '<div class="stat"><b>' + money(owed) + '</b><span>Waiting on payment</span></div>' +
+        '<div class="stat"><b>' + live.filter(o => o.status !== "Picked up").length + '</b><span>Still to pick up</span></div>';
+    }
+    $("stats").hidden = !all;
+    $("archiveBtn").hidden = view !== "active";
+    $("orderList").innerHTML = orders.length ? orders.map(orderCard).join("") : '<p class="card muted">No orders here yet.</p>';
+  }
+  function orderCard(o){
+    const acts = [];
+    if(o.status !== "Canceled" && !o.archived_at){
+      if(o.status === "Awaiting payment") acts.push('<button class="btn small" data-status="Paid" data-num="' + o.order_num + '">Mark paid</button>');
+      if(o.status !== "Picked up") acts.push('<button class="btn small" data-status="Picked up" data-num="' + o.order_num + '">Picked up</button>');
+      if(o.status !== "Awaiting payment") acts.push('<button class="btn ghost small" data-status="Awaiting payment" data-num="' + o.order_num + '">Undo</button>');
+      acts.push('<button class="btn ghost small" data-status="Canceled" data-num="' + o.order_num + '">Cancel order</button>');
+    }
+    const badge = o.status === "Picked up" ? "Picked" : o.status === "Awaiting payment" ? "" : o.status;
+    return '<article class="order' + (o.status === "Canceled" ? " canceled" : "") + '">' +
+      '<div class="o-head"><b>#' + o.order_num + ' ' + esc(o.customer_name) + '</b><span class="badge ' + badge + '">' + esc(o.status) + '</span></div>' +
+      '<div class="o-sub">' + esc(o.pickup) + ' · <a href="tel:' + esc(String(o.phone).replace(/[^\d+]/g, "")) + '">' + esc(o.phone) + '</a> · ' + esc(when(o.placed_at)) + '</div>' +
+      '<div class="o-items">' + esc(o.items_summary) + '</div>' +
+      '<div class="o-sub"><b style="color:var(--ink)">' + money(o.total) + '</b> by ' + esc(o.payment) +
+        (o.restocked_at ? ' · items put back ' + esc(when(o.restocked_at)) : '') + (o.archived_at ? ' · archived' : '') + '</div>' +
+      (acts.length ? '<div class="o-acts">' + acts.join("") + '</div>' : '') + '</article>';
+  }
+  $("orderList").addEventListener("click", async e => {
+    const b = e.target.closest("[data-status]"); if(!b) return;
+    const num = +b.dataset.num, status = b.dataset.status;
+    if(status === "Canceled" && !confirm("Cancel order #" + num + "? Its items go back on the menu.")) return;
+    b.disabled = true;
+    await run(sb.from("orders").update({status}).eq("order_num", num), "#" + num + " → " + status).catch(() => {});
+    loadOrders();
+  });
+  $("archiveBtn").addEventListener("click", async () => {
+    const drop = $("dropPick").value;
+    if(!confirm("Archive every picked-up and canceled order for this drop? They move to the Archived view.")) return;
+    await run(sb.from("orders").update({archived_at: new Date().toISOString()}).eq("drop_id", drop).is("archived_at", null).in("status", ["Picked up", "Canceled"]), "Archived").catch(() => {});
+    loadOrders();
+  });
+
+  /* ---------- To bake ---------- */
+  async function loadBake(){
+    const rows = await run(sb.from("to_bake").select("*"));
+    $("bakeList").innerHTML = rows.length
+      ? '<table><thead><tr><th>Drop</th><th>Item</th><th class="num">To bake</th></tr></thead><tbody>' +
+        rows.map(r => '<tr><td>' + esc(r.drop) + '</td><td>' + esc(r.item) + '</td><td class="num"><b>' + r.to_bake + '</b></td></tr>').join("") + '</tbody></table>'
+      : '<p class="muted">Nothing to bake yet.</p>';
+  }
+
+  /* ---------- Menu, drop and slots ---------- */
+  $("menuDropPick").addEventListener("change", loadMenu);
+  const field = (label, name, value, type, cls) =>
+    '<div class="' + (cls || "") + '"><label class="f">' + label + '</label><input class="in" name="' + name + '" type="' + (type || "text") + '"' +
+    (type === "number" ? ' min="0" step="' + (name === "price" ? "0.01" : "1") + '" inputmode="decimal"' : '') + ' value="' + esc(value) + '"></div>';
+  const check = (label, name, on) => '<label class="chk"><input type="checkbox" name="' + name + '"' + (on ? " checked" : "") + '> ' + label + '</label>';
+  const form = el => { const o = {}; el.querySelectorAll("[name]").forEach(i => o[i.name] = i.type === "checkbox" ? i.checked : i.type === "number" ? Number(i.value) : i.value.trim()); return o; };
+
+  async function loadMenu(){
+    const id = $("menuDropPick").value, d = drops.find(x => x.id === id);
+    if(!d){ $("dropCard").innerHTML = '<p class="muted">No drops yet. Tap “+ New drop”.</p>'; $("itemList").innerHTML = $("slotList").innerHTML = ""; return; }
+    $("dropCard").innerHTML = '<h2>Drop</h2><form data-form="drop"><div class="edit">' +
+      field("Name", "name", d.name) + field("Pickup", "pickup", d.pickup) +
+      field("Order deadline", "order_deadline", d.order_deadline, "text", "full") + '</div>' +
+      check("Taking orders (shows on the website)", "taking_orders", d.taking_orders) +
+      '<div class="row" style="margin-top:12px"><button class="btn small">Save drop</button></div></form>';
+    const [items, slots] = await Promise.all([
+      run(sb.from("menu_items").select("*").eq("drop_id", id).order("sort").order("name")),
+      run(sb.from("slots").select("*").eq("drop_id", id).order("sort").order("slot_id"))]);
+    $("itemList").innerHTML = items.length ? items.map(i =>
+      '<form class="item" data-form="item" data-id="' + esc(i.item_id) + '"><div class="edit">' +
+        field("Name", "name", i.name, "text", "name") + field("Price", "price", i.price, "number") + field("Available", "available", i.available, "number") +
+        field("Description", "description", i.description, "text", "name") + field("Emoji", "emoji", i.emoji) + field("Sort", "sort", i.sort, "number") + '</div>' +
+        '<div class="row" style="justify-content:space-between;margin-top:8px">' + check("Show on menu", "show", i.show) +
+        '<button class="btn small">Save</button></div></form>').join("") : '<p class="muted">No items yet.</p>';
+    $("slotList").innerHTML = slots.length ? slots.map(s =>
+      '<form class="item" data-form="slot" data-id="' + esc(s.slot_id) + '"><div class="edit" style="grid-template-columns:2fr 1fr 1fr">' +
+        field("Pickup time", "pickup_time", s.pickup_time, "text", "name") + field("Max orders", "max_orders", s.max_orders, "number") + field("Sort", "sort", s.sort, "number") +
+        '</div><div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn small">Save</button></div></form>').join("") : '<p class="muted">No pickup times yet.</p>';
+  }
+  document.querySelector('[data-panel="menu"]').addEventListener("submit", async e => {
+    e.preventDefault();
+    const f = e.target, kind = f.dataset.form, drop = $("menuDropPick").value, v = form(f);
+    if(kind === "drop"){ await run(sb.from("drops").update(v).eq("id", drop), "Drop saved"); await loadDrops(); }
+    if(kind === "item") await run(sb.from("menu_items").update(v).eq("drop_id", drop).eq("item_id", f.dataset.id), "Item saved");
+    if(kind === "slot") await run(sb.from("slots").update(v).eq("drop_id", drop).eq("slot_id", f.dataset.id), "Pickup time saved");
+  });
+  const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30);
+  $("addItem").addEventListener("click", async () => {
+    const name = prompt("New item name"); if(!name) return;
+    const drop = $("menuDropPick").value, id = slug(name) || ("item-" + Date.now());
+    await run(sb.from("menu_items").insert({drop_id: drop, item_id: id, name, price: 0, available: 0, show: false, sort: 99}), "Added. Set its price and stock, then tick Show.").catch(() => {});
+    loadMenu();
+  });
+  $("addSlot").addEventListener("click", async () => {
+    const label = prompt("New pickup time, e.g. Monday, 7 to 8 pm"); if(!label) return;
+    await run(sb.from("slots").insert({drop_id: $("menuDropPick").value, slot_id: slug(label) || ("slot-" + Date.now()), pickup_time: label, max_orders: 5, sort: 99}), "Pickup time added").catch(() => {});
+    loadMenu();
+  });
+  $("newDrop").addEventListener("click", async () => {
+    const name = prompt("New drop name, e.g. Pizza Friday"); if(!name) return;
+    const id = slug(name) || ("drop-" + Date.now());
+    await run(sb.from("drops").insert({id, name, taking_orders: false, sort: drops.length + 1}), "Drop added. It's hidden until you tick Taking orders.").catch(() => {});
+    await loadDrops(); $("menuDropPick").value = id; loadMenu();
+  });
+
+  /* ---------- Shop settings ---------- */
+  async function loadSettings(){
+    const s = (await run(sb.from("settings").select("*").eq("id", 1)))[0];
+    $("settingsCard").innerHTML = '<h2>Shop settings</h2><form data-form="settings">' +
+      check("Shop open (off shows the sold-out page with the waitlist sign-up)", "shop_open", s.shop_open) +
+      '<div class="edit" style="margin-top:6px">' + field("Bakery name", "bakery_name", s.bakery_name) + field("Zelle email or phone", "zelle", s.zelle) +
+      field("Zelle name", "zelle_name", s.zelle_name) + field("Venmo username (blank turns Venmo off)", "venmo", s.venmo) + '</div>' +
+      check("Accept cash", "accept_cash", s.accept_cash) +
+      '<div class="row" style="margin-top:14px"><button class="btn">Save settings</button></div></form>';
+  }
+  $("settingsCard").addEventListener("submit", async e => { e.preventDefault(); await run(sb.from("settings").update(form(e.target)).eq("id", 1), "Settings saved"); });
+
+  start();
+})();
+</script>
+</body>
+</html>
