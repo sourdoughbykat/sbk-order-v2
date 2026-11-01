@@ -103,7 +103,12 @@ var LockService = { getScriptLock: function () { return {
   tryLock: function () { if (lockBusy || lockHeld) return false; lockHeld = true; return true; },
   releaseLock: function () { lockHeld = false; }
 }; } };
-var ContentService = { MimeType: { JSON: "json" }, createTextOutput: function (s) { return { body: s, setMimeType: function () { return this; } }; } };
+var props = {};
+var PropertiesService = { getScriptProperties: function () { return {
+  getProperty: function (k) { return props[k] === undefined ? null : props[k]; },
+  setProperty: function (k, v) { props[k] = String(v); }
+}; } };
+var ContentService ={ MimeType: { JSON: "json" }, createTextOutput: function (s) { return { body: s, setMimeType: function () { return this; } }; } };
 
 load("apps-script/Code.gs");
 
@@ -162,6 +167,9 @@ out("archiving doesn't reuse numbers");
 var moved = sheets.Orders.data.splice(1, 2);
 moved.forEach(function (x) { sheets.Archive.data.push(x); });
 check("next number is still #104 after orders move to Archive", order({}).num === 104);
+var keep = sheets.Orders.data.splice(1);
+check("deleting test orders doesn't reuse their numbers (#105)", order({}).num === 105);
+sheets.Orders.data = sheets.Orders.data.concat(keep);
 
 out("same order sent twice (retry / double tap)");
 cacheStore = {};

@@ -28,7 +28,7 @@ const STATUS_NEW = "Awaiting payment";
 const MENU_CACHE_KEY = "menu";
 const MENU_CACHE_SECONDS = 15;
 const ORDER_CACHE_SECONDS = 6 * 60 * 60;
-const LOCK_WAIT_MS = 8000;
+const LOCK_WAIT_MS = 30000;
 const FIRST_ORDER_NUM = 101;
 const PAY = { zelle: "Zelle", venmo: "Venmo", cash: "Cash" };
 
@@ -177,65 +177,75 @@ function placeOrder_(req) {
   const seen = cache.get("order:" + orderId);
   if (seen) return JSON.parse(seen);
 
+  // Checks that don't depend on other orders happen before waiting in line.
+  const s = readSettings_();
+  if (!truthy_(s.shopOpen)) return fail_("Pre-orders are closed right now.", true);
+  const drop = readTable_(TAB.drops).rows.find(d => str_(d.dropid) === dropId);
+  if (!drop || !truthy_(drop.takingorders)) return fail_("Ordering for this drop just closed.", true);
+  if (!PAY[payKey]) return fail_("Choose how you'd like to pay.");
+  if (payKey === "venmo" && !str_(s.venmo)) return fail_("Venmo isn't available. Choose another way to pay.", true);
+  if (payKey === "cash" && s.acceptCash !== undefined && str_(s.acceptCash) !== "" && !truthy_(s.acceptCash)) {
+    return fail_("Cash isn't available. Choose another way to pay.", true);
+  }
+  const slot = readTable_(TAB.slots).rows.find(x => str_(x.dropid) === dropId && str_(x.slotid) === slotId);
+  if (!slot) return fail_("That pickup time isn't available anymore. Choose another.", true);
+  const want = [];
+  for (const id in wanted) {
+    const qty = Math.floor(Number(wanted[id]));
+    if (!(qty > 0)) continue;
+    if (qty > 50) return fail_("That's more than we can bake in one order. Message Kat for large orders.");
+    want.push({ id: String(id), qty });
+  }
+  if (!want.length) return fail_("Your order is empty.");
+
+  // One order at a time from here: re-read stock and slots, then write.
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(LOCK_WAIT_MS)) {
     return { ok: false, busy: true, error: "Lots of orders are coming in right now. Wait a few seconds and tap Place order again." };
   }
   try {
-    const again = findOrderReceipt_(orderId);
-    if (again) return again;
+    const orders = readTable_(TAB.orders);
+    if (orders.rows.some(r => str_(r.orderid) === orderId)) return findOrderReceipt_(orderId);
 
-    const s = readSettings_();
-    if (!truthy_(s.shopOpen)) return fail_("Pre-orders are closed right now.", true);
+    const taken = orders.rows.filter(o => str_(o.order) && !isCanceled_(o.status) &&
+      str_(o.dropid) === dropId && str_(o.slotid) === slotId).length;
+    if (taken >= Math.floor(num_(slot.maxorders))) return fail_(str_(slot.pickuptime) + " just filled up. Choose another pickup time.", true);
 
-    const drop = readTable_(TAB.drops).rows.find(d => str_(d.dropid) === dropId);
-    if (!drop || !truthy_(drop.takingorders)) return fail_("Ordering for this drop just closed.", true);
-
-    if (!PAY[payKey]) return fail_("Choose how you'd like to pay.");
-    if (payKey === "venmo" && !str_(s.venmo)) return fail_("Venmo isn't available. Choose another way to pay.", true);
-    if (payKey === "cash" && s.acceptCash !== undefined && str_(s.acceptCash) !== "" && !truthy_(s.acceptCash)) {
-      return fail_("Cash isn't available. Choose another way to pay.", true);
-    }
-
-    const slot = readTable_(TAB.slots).rows.find(x => str_(x.dropid) === dropId && str_(x.slotid) === slotId);
-    if (!slot) return fail_("That pickup time isn't available anymore. Choose another.", true);
-    const left = Math.floor(num_(slot.maxorders)) - (slotUsage_()[slotKey_(dropId, slotId)] || 0);
-    if (left <= 0) return fail_(str_(slot.pickuptime) + " just filled up. Choose another pickup time.", true);
-
-    // Check every item before changing anything.
     const menu = readTable_(TAB.menu);
     const lines = [];
-    for (const id in wanted) {
-      const qty = Math.floor(Number(wanted[id]));
-      if (!(qty > 0)) continue;
-      if (qty > 50) return fail_("That's more than we can bake in one order. Message Kat for large orders.");
-      const it = menu.rows.find(i => str_(i.dropid) === dropId && str_(i.itemid) === String(id) && truthy_(i.show));
+    for (const w of want) {
+      const it = menu.rows.find(i => str_(i.dropid) === dropId && str_(i.itemid) === w.id && truthy_(i.show));
       if (!it) return fail_("Something on your order isn't on the menu anymore.", true);
       const avail = Math.floor(num_(it.available));
-      if (qty > avail) {
+      if (w.qty > avail) {
         return fail_(avail > 0
           ? "Only " + avail + " " + str_(it.name) + " left. Adjust your order and try again."
           : str_(it.name) + " just sold out. Adjust your order and try again.", true);
       }
-      lines.push({ row: it._row, avail, id: str_(it.itemid), name: str_(it.name), qty, price: num_(it.price) });
+      lines.push({ row: it._row, avail, id: str_(it.itemid), name: str_(it.name), qty: w.qty, price: num_(it.price) });
     }
-    if (!lines.length) return fail_("Your order is empty.");
 
     // All good: take the next order number, reduce stock, write the order.
-    const num = nextOrderNumber_();
+    const num = nextOrderNumber_(orders);
     const total = round2_(lines.reduce((t, l) => t + l.qty * l.price, 0));
     const availCol = colOf_(menu, "available");
     lines.forEach(l => menu.sheet.getRange(l.row, availCol).setValue(l.avail - l.qty));
 
-    appendRows_(TAB.orders, [{
+    writeRows_(orders, lastFilledRow_(orders) + 1, [{
       order: num, placed: new Date(), drop: str_(drop.name), name: safe_(name), phone: safe_(phone),
       pickup: str_(slot.pickuptime), items: lines.map(l => l.qty + " x " + l.name).join(", "),
       total, payment: PAY[payKey], status: STATUS_NEW, slotid: slotId, restocked: "", dropid: dropId, orderid: orderId
     }]);
-    appendRows_(TAB.lines, lines.map(l => ({
-      order: num, drop: str_(drop.name), item: l.name, qty: l.qty, status: lineStatusFormula_, dropid: dropId, itemid: l.id
+    const statusCol = colLetter_(colOf_(orders, "status")), orderCol = colLetter_(colOf_(orders, "order"));
+    const lineSheet = SpreadsheetApp.getActive().getSheetByName(TAB.lines);
+    const lineKeys = lineSheet.getRange(1, 1, 1, lineSheet.getLastColumn()).getValues()[0].map(key_);
+    writeRows_({ sheet: lineSheet, keys: lineKeys }, lastDataRow_(lineSheet) + 1, lines.map(l => ({
+      order: num, drop: str_(drop.name), item: l.name, qty: l.qty, dropid: dropId, itemid: l.id,
+      // Status looks up the order's status, like the shop's existing rows do.
+      status: row => '=IFERROR(INDEX(Orders!' + statusCol + ':' + statusCol + ',MATCH(A' + row + ',Orders!' + orderCol + ':' + orderCol + ',0)),"")'
     })));
     SpreadsheetApp.flush();
+    PropertiesService.getScriptProperties().setProperty("lastOrderNum", String(num));
 
     const receipt = {
       ok: true, num, total, drop: str_(drop.name), pickup: str_(slot.pickuptime), pay: PAY[payKey],
@@ -247,13 +257,6 @@ function placeOrder_(req) {
   } finally {
     lock.releaseLock();
   }
-}
-
-/** OrderLines → Status looks up the order's status, like the shop's existing rows do. */
-function lineStatusFormula_(row) {
-  const orders = readTable_(TAB.orders);
-  const status = colLetter_(colOf_(orders, "status")), order = colLetter_(colOf_(orders, "order"));
-  return '=IFERROR(INDEX(Orders!' + status + ':' + status + ',MATCH(A' + row + ',Orders!' + order + ':' + order + ',0)),"")';
 }
 
 /** Rebuilds the receipt for an order already in the sheet (a retry after the first attempt went through). */
@@ -269,14 +272,26 @@ function findOrderReceipt_(orderId) {
            pickup: str_(o.pickup), pay: str_(o.payment), lines };
 }
 
-/** Next number after the highest in Orders and Archive, so numbers never repeat after archiving. */
-function nextOrderNumber_() {
-  let max = FIRST_ORDER_NUM - 1;
-  [TAB.orders, TAB.archive].forEach(t => {
-    if (!SpreadsheetApp.getActive().getSheetByName(t)) return;
-    readTable_(t).rows.forEach(r => { max = Math.max(max, Math.floor(num_(r.order))); });
-  });
+/**
+ * Next number after the highest ever used, so numbers never repeat after archiving.
+ * The last number handed out is remembered, so Archive is only read the very first time.
+ */
+function nextOrderNumber_(orders) {
+  const props = PropertiesService.getScriptProperties();
+  let max = Math.floor(num_(props.getProperty("lastOrderNum")));
+  if (!max) {
+    max = FIRST_ORDER_NUM - 1;
+    const archive = SpreadsheetApp.getActive().getSheetByName(TAB.archive);
+    if (archive) readTable_(TAB.archive).rows.forEach(r => { max = Math.max(max, Math.floor(num_(r.order))); });
+  }
+  orders.rows.forEach(r => { max = Math.max(max, Math.floor(num_(r.order))); });
   return max + 1;
+}
+
+/** Last row with an order number, from a table already read (checkbox columns can make getLastRow() too high). */
+function lastFilledRow_(table) {
+  for (let i = table.rows.length - 1; i >= 0; i--) if (str_(table.rows[i][table.keys[0]])) return table.rows[i]._row;
+  return 1;
 }
 
 /* ---------------- Waitlist ---------------- */
@@ -325,17 +340,21 @@ function readSettings_() {
   return out;
 }
 
-/** Appends rows by column name. A function value is called with the new row's number (for formulas). */
+/** Appends rows by column name after the last filled row. */
 function appendRows_(name, objs) {
   if (!objs.length) return;
   const sheet = SpreadsheetApp.getActive().getSheetByName(name);
   const keys = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0].map(key_);
-  const start = lastDataRow_(sheet) + 1;
-  const rows = objs.map((o, i) => keys.map(k => {
+  writeRows_({ sheet, keys }, lastDataRow_(sheet) + 1, objs);
+}
+
+/** Writes rows by column name starting at a row. A function value is called with its row number (for formulas). */
+function writeRows_(table, start, objs) {
+  const rows = objs.map((o, i) => table.keys.map(k => {
     const v = o[k];
     return v === undefined ? "" : typeof v === "function" ? v(start + i) : v;
   }));
-  sheet.getRange(start, 1, rows.length, keys.length).setValues(rows);
+  table.sheet.getRange(start, 1, rows.length, table.keys.length).setValues(rows);
 }
 
 /** Last row with something in column A (checkbox columns can make getLastRow() too high). */
