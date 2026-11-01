@@ -30,6 +30,7 @@ const MENU_CACHE_SECONDS = 15;
 const ORDER_CACHE_SECONDS = 6 * 60 * 60;
 const LOCK_WAIT_MS = 30000;
 const FIRST_ORDER_NUM = 101;
+const PLACED_FORMAT = "M/d/yyyy H:mm:ss";
 const PAY = { zelle: "Zelle", venmo: "Venmo", cash: "Cash" };
 
 /* ---------------- Web app entry points ---------------- */
@@ -231,11 +232,13 @@ function placeOrder_(req) {
     const availCol = colOf_(menu, "available");
     lines.forEach(l => menu.sheet.getRange(l.row, availCol).setValue(l.avail - l.qty));
 
-    writeRows_(orders, lastFilledRow_(orders) + 1, [{
+    const orderRow = lastFilledRow_(orders) + 1;
+    writeRows_(orders, orderRow, [{
       order: num, placed: new Date(), drop: str_(drop.name), name: safe_(name), phone: safe_(phone),
       pickup: str_(slot.pickuptime), items: lines.map(l => l.qty + " x " + l.name).join(", "),
       total, payment: PAY[payKey], status: STATUS_NEW, slotid: slotId, restocked: "", dropid: dropId, orderid: orderId
     }]);
+    orders.sheet.getRange(orderRow, colOf_(orders, "placed")).setNumberFormat(PLACED_FORMAT);
     const statusCol = colLetter_(colOf_(orders, "status")), orderCol = colLetter_(colOf_(orders, "order"));
     const lineSheet = SpreadsheetApp.getActive().getSheetByName(TAB.lines);
     const lineKeys = lineSheet.getRange(1, 1, 1, lineSheet.getLastColumn()).getValues()[0].map(key_);

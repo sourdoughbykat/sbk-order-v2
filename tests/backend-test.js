@@ -27,7 +27,8 @@ FakeSheet.prototype = {
         return api;
       },
       setValue: function (v) { return api.setValues([[v]]); },
-      setFontWeight: function () { return api; }
+      setFontWeight: function () { return api; },
+      setNumberFormat: function (f) { sh.formats = sh.formats || {}; sh.formats[row + ':' + col] = f; return api; }
     };
     return api;
   },
@@ -160,6 +161,7 @@ var row = orderRow(103);
 check("Orders row in the shop's format", cell("Orders", row, "Drop") === "Fall Menu" && cell("Orders", row, "Items") === "2 x Large Pumpkin Spice Loaf, 3 x Mini Pumpkin Spice Choco Chip Muffins"
   && cell("Orders", row, "Status") === "Awaiting payment" && cell("Orders", row, "Payment") === "Zelle" && cell("Orders", row, "Slot ID") === "m5" && cell("Orders", row, "Drop ID") === "bread" && cell("Orders", row, "Order ID") === "t" + n);
 var L = sheets.OrderLines.data;
+check("Placed shows date and time", sheets.Orders.formats[row + ":2"] === "M/d/yyyy H:mm:ss");
 check("OrderLines rows in the shop's format", L.length === 4 && L[2][0] === 103 && L[2][1] === "Fall Menu" && L[2][2] === "Large Pumpkin Spice Loaf" && L[2][3] === 2 && L[2][5] === "bread" && L[2][6] === "psl", L[2]);
 check("OrderLines Status is the lookup formula for its own row", L[2][4] === '=IFERROR(INDEX(Orders!J:J,MATCH(A3,Orders!A:A,0)),"")' && L[3][4].indexOf("MATCH(A4,") > 0, L[2][4]);
 
