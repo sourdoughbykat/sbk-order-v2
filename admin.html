@@ -93,6 +93,7 @@ td.num,th.num{text-align:right}
 .chk{display:flex;align-items:center;gap:8px;font-weight:700;margin:10px 0 0}
 .chk input{width:20px;height:20px}
 .login{max-width:420px;margin:12vh auto 0}
+.login a{color:var(--solid);font-weight:700}
 /* Storefront strip: link to the shop and the open/closed sign */
 .front{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--card);border-radius:20px;padding:12px 14px;margin-bottom:12px}
 .shoplink{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font-weight:800}
@@ -118,14 +119,20 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 
   <section class="login card" id="loginView" hidden>
     <h1>SBK Kitchen</h1>
-    <p class="muted">Sign in with your email. We'll send you a link, so there's no password to remember.</p>
+    <p class="muted" id="loginIntro">Enter your passcode.</p>
     <form id="loginForm">
-      <label class="f" for="email">Email</label>
-      <input class="in" id="email" type="email" autocomplete="email" required>
+      <div id="emailRow">
+        <label class="f" for="email">Email</label>
+        <input class="in" id="email" type="email" autocomplete="username">
+      </div>
+      <p class="muted" id="emailKnown" hidden style="font-size:13px;margin:0">Signing in as <b id="emailShown"></b> · <a href="#" id="notMe">change</a></p>
+      <label class="f" for="passcode">Passcode</label>
+      <input class="in" id="passcode" type="password" inputmode="numeric" autocomplete="current-password" required>
       <p class="err" id="loginErr" hidden></p>
-      <button class="btn" id="loginBtn" style="width:100%;margin-top:14px">Email me a sign-in link</button>
+      <button class="btn" id="loginBtn" style="width:100%;margin-top:14px">Sign in</button>
+      <p style="text-align:center;margin:14px 0 0;font-size:14px"><a href="#" id="forgot">Forgot passcode? Email me a sign-in link</a></p>
     </form>
-    <p id="loginSent" hidden><b>Check your email.</b> Open the link on this device to sign in.</p>
+    <p id="loginSent" hidden><b>Check your email.</b> Open the link on this device, then set a new passcode in Shop settings.</p>
   </section>
 
   <section class="login card" id="deniedView" hidden>
@@ -187,6 +194,18 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 
     <section data-panel="settings" hidden>
       <div class="card" id="settingsCard"></div>
+      <div class="card">
+        <h2>Sign-in passcode</h2>
+        <p class="muted" style="margin-top:-4px">The passcode you use to open this page. Use at least 6 digits, ideally 8, and not the order-delete code.</p>
+        <form id="passForm">
+          <div class="edit">
+            <div><label class="f" for="newPass">New passcode</label><input class="in" id="newPass" type="password" inputmode="numeric" autocomplete="new-password"></div>
+            <div><label class="f" for="newPass2">Type it again</label><input class="in" id="newPass2" type="password" inputmode="numeric" autocomplete="new-password"></div>
+          </div>
+          <p class="err" id="passErr" hidden></p>
+          <div class="row" style="margin-top:12px"><button class="btn small" id="passBtn">Save passcode</button></div>
+        </form>
+      </div>
     </section>
   </div>
 </div>
@@ -226,23 +245,64 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
   function show(view){ ["loginView","deniedView","appView"].forEach(v => $(v).hidden = v !== view); }
   async function start(){
     const {data:{session}} = await sb.auth.getSession();
-    if(!session){ show("loginView"); return; }
+    if(!session){ show("loginView"); paintLogin(); return; }
     const {data:isAdmin} = await sb.rpc("is_admin");
     if(!isAdmin){ show("deniedView"); return; }
     $("whoEmail").textContent = session.user.email;
+    try{ localStorage.setItem(EMAIL_KEY, session.user.email); }catch(err){}
     show("appView");
     loadShopSign();
     await loadDrops();
     openTab(tab);
   }
+  /* The email is remembered on this device after the first sign-in, so next time only the passcode is asked for */
+  const EMAIL_KEY = "sbk-kitchen-email";
+  const savedEmail = () => { try{ return localStorage.getItem(EMAIL_KEY) || ""; }catch(e){ return ""; } };
+  function paintLogin(){
+    const em = savedEmail();
+    $("emailRow").hidden = !!em; $("emailKnown").hidden = !em; $("emailShown").textContent = em;
+    $("loginIntro").textContent = em ? "Enter your passcode." : "Sign in with your email and passcode.";
+    setTimeout(() => (em ? $("passcode") : $("email")).focus(), 50);
+  }
+  const loginEmail = () => (savedEmail() || $("email").value).trim().toLowerCase();
+  function loginError(msg){ $("loginErr").textContent = msg; $("loginErr").hidden = false; }
+  $("notMe").addEventListener("click", e => { e.preventDefault(); try{ localStorage.removeItem(EMAIL_KEY); }catch(err){} paintLogin(); });
   $("loginForm").addEventListener("submit", async e => {
     e.preventDefault();
-    const email = $("email").value.trim().toLowerCase(), btn = $("loginBtn");
-    btn.disabled = true; btn.textContent = "Sending…"; $("loginErr").hidden = true;
-    const {error} = await sb.auth.signInWithOtp({email, options:{emailRedirectTo: location.origin + location.pathname}});
-    btn.disabled = false; btn.textContent = "Email me a sign-in link";
-    if(error){ $("loginErr").textContent = error.message; $("loginErr").hidden = false; return; }
+    const email = loginEmail(), password = $("passcode").value, btn = $("loginBtn");
+    $("loginErr").hidden = true;
+    if(!email) return loginError("Enter your email.");
+    if(!password) return loginError("Enter your passcode.");
+    btn.disabled = true; btn.textContent = "Signing in…";
+    const {error} = await sb.auth.signInWithPassword({email, password});
+    btn.disabled = false; btn.textContent = "Sign in";
+    if(error){ $("passcode").select(); return loginError(/invalid/i.test(error.message) ? "That passcode didn't work. Try again." : error.message); }
+    try{ localStorage.setItem(EMAIL_KEY, email); }catch(err){}
+    $("passcode").value = "";
+    start();
+  });
+  $("forgot").addEventListener("click", async e => {
+    e.preventDefault();
+    const email = loginEmail();
+    $("loginErr").hidden = true;
+    if(!email){ $("emailRow").hidden = false; return loginError("Enter your email first, then tap the link again."); }
+    const {error} = await sb.auth.signInWithOtp({email, options:{emailRedirectTo: location.origin + location.pathname, shouldCreateUser: false}});
+    if(error) return loginError(error.message);
+    try{ localStorage.setItem(EMAIL_KEY, email); }catch(err){}
     $("loginForm").hidden = true; $("loginSent").hidden = false;
+  });
+  $("passForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    const a = $("newPass").value, b = $("newPass2").value, err = $("passErr");
+    err.hidden = true;
+    if(a.length < 6){ err.textContent = "Use at least 6 characters."; err.hidden = false; return; }
+    if(a !== b){ err.textContent = "The two passcodes don't match."; err.hidden = false; return; }
+    const btn = $("passBtn"); btn.disabled = true; btn.textContent = "Saving…";
+    const {error} = await sb.auth.updateUser({password: a});
+    btn.disabled = false; btn.textContent = "Save passcode";
+    if(error){ err.textContent = error.message; err.hidden = false; return; }
+    $("newPass").value = $("newPass2").value = "";
+    toast("Passcode saved. Use it next time you sign in.");
   });
   document.addEventListener("click", async e => { if(e.target.closest("[data-signout]")){ await sb.auth.signOut(); location.reload(); } });
   sb.auth.onAuthStateChange((ev) => { if(ev === "SIGNED_IN" && $("appView").hidden) start(); });
