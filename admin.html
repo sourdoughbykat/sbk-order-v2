@@ -88,6 +88,24 @@ td.num,th.num{text-align:right}
 .chk{display:flex;align-items:center;gap:8px;font-weight:700;margin:10px 0 0}
 .chk input{width:20px;height:20px}
 .login{max-width:420px;margin:12vh auto 0}
+/* Storefront strip: link to the shop and the open/closed sign */
+.front{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--card);border-radius:20px;padding:12px 14px;margin-bottom:12px}
+.shoplink{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font-weight:800}
+.shoplink .ico{width:44px;height:44px;border-radius:14px;background:var(--soft);display:grid;place-items:center}
+.shoplink small{display:block;color:var(--muted);font-weight:600;font-size:12px}
+.signbtn{position:relative;border:0;background:none;padding:18px 4px 0;-webkit-tap-highlight-color:transparent}
+.signbtn::before,.signbtn::after{content:"";position:absolute;top:2px;width:2px;height:20px;background:#B49A5E}
+.signbtn::before{left:30%;transform:rotate(14deg)}
+.signbtn::after{right:30%;transform:rotate(-14deg)}
+.signbtn span{display:block;font-family:"Fraunces",Georgia,serif;font-style:italic;font-weight:800;font-size:17px;letter-spacing:.03em;padding:6px 16px 8px;border-radius:10px;transition:transform .3s}
+.signbtn[aria-pressed="true"] span{background:var(--solid);color:var(--on-solid);box-shadow:0 0 0 2px #B49A5E inset}
+.signbtn[aria-pressed="false"] span{background:var(--card);color:var(--bad);box-shadow:0 0 0 2px var(--bad) inset;transform:rotate(-5deg)}
+.signbtn small{display:block;text-align:center;color:var(--muted);font-size:11px;font-weight:700;margin-top:4px}
+@media (prefers-reduced-motion:reduce){.signbtn span{transition:none}}
+.btn.danger{background:var(--bad);color:#fff}
+.btn.link{background:none;color:var(--bad);padding-left:6px;padding-right:6px}
+dialog{border:0;border-radius:20px;padding:20px;max-width:min(380px,calc(100% - 32px));background:var(--card);color:var(--ink)}
+dialog::backdrop{background:rgba(0,0,0,.4)}
 </style>
 </head>
 <body>
@@ -116,6 +134,13 @@ td.num,th.num{text-align:right}
       <h1>SBK Kitchen</h1>
       <div class="who"><span id="whoEmail"></span><br><button data-signout>Sign out</button></div>
     </header>
+    <div class="front">
+      <a class="shoplink" href="./" target="_blank" rel="noopener">
+        <span class="ico" aria-hidden="true"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l1.5-5h15L21 9"/><path d="M3 9h18v2a3 3 0 0 1-6 0 3 3 0 0 1-6 0 3 3 0 0 1-6 0z"/><path d="M5 13.5V20h14v-6.5"/><path d="M10 20v-4h4v4"/></svg></span>
+        <span>View the shop<small>Opens what customers see</small></span>
+      </a>
+      <button class="signbtn" id="shopSign" aria-pressed="true" aria-label="Shop is open. Tap to close it."><span id="shopSignText">OPEN</span><small id="shopSignHint">tap to close</small></button>
+    </div>
     <nav class="tabs" role="tablist">
       <button role="tab" data-tab="orders" aria-selected="true">Orders</button>
       <button role="tab" data-tab="bake" aria-selected="false">To bake</button>
@@ -161,6 +186,19 @@ td.num,th.num{text-align:right}
   </div>
 </div>
 <div class="toast" id="toast" hidden></div>
+<dialog id="delDialog" aria-labelledby="delTitle">
+  <form id="delForm">
+    <h2 id="delTitle">Delete order #<span id="delNum"></span>?</h2>
+    <p class="muted" style="margin-top:-4px">This removes it for good. Its items go back on the menu unless it was already picked up or canceled.</p>
+    <label class="f" for="delCode">Passcode</label>
+    <input class="in" id="delCode" type="password" inputmode="numeric" autocomplete="off">
+    <p class="err" id="delErr" hidden></p>
+    <div class="row" style="margin-top:14px;justify-content:flex-end">
+      <button class="btn ghost" type="button" id="delCancel">Keep order</button>
+      <button class="btn danger" id="delGo">Delete</button>
+    </div>
+  </form>
+</dialog>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
 <script>
@@ -188,6 +226,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
     if(!isAdmin){ show("deniedView"); return; }
     $("whoEmail").textContent = session.user.email;
     show("appView");
+    loadShopSign();
     await loadDrops();
     openTab(tab);
   }
@@ -257,6 +296,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
       if(o.status !== "Awaiting payment") acts.push('<button class="btn ghost small" data-status="Awaiting payment" data-num="' + o.order_num + '">Undo</button>');
       acts.push('<button class="btn ghost small" data-status="Canceled" data-num="' + o.order_num + '">Cancel order</button>');
     }
+    acts.push('<button class="btn link small" data-del="' + o.order_num + '">Delete</button>');
     const badge = o.status === "Picked up" ? "Picked" : o.status === "Awaiting payment" ? "" : o.status;
     return '<article class="order' + (o.status === "Canceled" ? " canceled" : "") + '">' +
       '<div class="o-head"><b>#' + o.order_num + ' ' + esc(o.customer_name) + '</b><span class="badge ' + badge + '">' + esc(o.status) + '</span></div>' +
@@ -267,6 +307,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
       (acts.length ? '<div class="o-acts">' + acts.join("") + '</div>' : '') + '</article>';
   }
   $("orderList").addEventListener("click", async e => {
+    const del = e.target.closest("[data-del]"); if(del){ askDelete(+del.dataset.del); return; }
     const b = e.target.closest("[data-status]"); if(!b) return;
     const num = +b.dataset.num, status = b.dataset.status;
     if(status === "Canceled" && !confirm("Cancel order #" + num + "? Its items go back on the menu.")) return;
@@ -279,6 +320,39 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
     if(!confirm("Archive every picked-up and canceled order for this drop? They move to the Archived view.")) return;
     await run(sb.from("orders").update({archived_at: new Date().toISOString()}).eq("drop_id", drop).is("archived_at", null).in("status", ["Picked up", "Canceled"]), "Archived").catch(() => {});
     loadOrders();
+  });
+
+  /* ---------- Delete an order (needs the passcode, checked by the database) ---------- */
+  let delNum = null;
+  function askDelete(num){
+    delNum = num; $("delNum").textContent = num; $("delCode").value = ""; $("delErr").hidden = true;
+    $("delDialog").showModal(); $("delCode").focus();
+  }
+  $("delCancel").addEventListener("click", () => $("delDialog").close());
+  $("delForm").addEventListener("submit", async e => {
+    e.preventDefault();
+    const btn = $("delGo"); btn.disabled = true; btn.textContent = "Deleting…";
+    const {data, error} = await sb.rpc("delete_order", {p_order_num: delNum, p_passcode: $("delCode").value});
+    btn.disabled = false; btn.textContent = "Delete";
+    if(error || !data || !data.ok){ $("delErr").textContent = error ? error.message : data.error; $("delErr").hidden = false; $("delCode").select(); return; }
+    $("delDialog").close(); toast("Order #" + data.num + " deleted"); loadOrders();
+  });
+
+  /* ---------- Open / closed sign ---------- */
+  function paintSign(open){
+    const b = $("shopSign");
+    b.setAttribute("aria-pressed", String(open));
+    b.setAttribute("aria-label", open ? "Shop is open. Tap to close it." : "Shop is closed. Tap to open it.");
+    $("shopSignText").textContent = open ? "OPEN" : "CLOSED";
+    $("shopSignHint").textContent = open ? "tap to close" : "tap to open";
+  }
+  async function loadShopSign(){ const s = await run(sb.from("settings").select("shop_open").eq("id", 1)); paintSign(!!(s[0] && s[0].shop_open)); }
+  $("shopSign").addEventListener("click", async () => {
+    const open = $("shopSign").getAttribute("aria-pressed") === "true";
+    if(!confirm(open ? "Close the shop? Customers will see the sold-out page with the waitlist sign-up." : "Open the shop? Customers can order again.")) return;
+    await run(sb.from("settings").update({shop_open: !open}).eq("id", 1), open ? "Shop closed" : "Shop open");
+    paintSign(!open);
+    if(tab === "settings") loadSettings();
   });
 
   /* ---------- To bake ---------- */
@@ -371,7 +445,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
       check("Accept cash", "accept_cash", s.accept_cash) +
       '<div class="row" style="margin-top:14px"><button class="btn">Save settings</button></div></form>';
   }
-  $("settingsCard").addEventListener("submit", async e => { e.preventDefault(); await run(sb.from("settings").update(form(e.target)).eq("id", 1), "Settings saved"); });
+  $("settingsCard").addEventListener("submit", async e => { e.preventDefault(); const v = form(e.target); await run(sb.from("settings").update(v).eq("id", 1), "Settings saved"); paintSign(v.shop_open); });
 
   start();
 })();
