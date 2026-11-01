@@ -256,7 +256,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
   }
 
   async function loadDrops(){
-    drops = await run(sb.from("drops").select("*").order("sort").order("id"));
+    drops = await run(sb.from("menus").select("*").order("sort").order("id"));
     const open = drops.find(d => d.taking_orders) || drops[0];
     const opts = drops.map(d => '<option value="' + esc(d.id) + '">' + esc(d.name) + (d.taking_orders ? " (active)" : "") + '</option>').join("");
     [$("dropPick"), $("menuDropPick")].forEach(sel => { const prev = sel.value; sel.innerHTML = opts; sel.value = drops.some(d => d.id === prev) ? prev : (open ? open.id : ""); });
@@ -268,7 +268,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
   async function loadOrders(quiet){
     const drop = $("dropPick").value, view = $("statusPick").value;
     if(!drop){ $("orderList").innerHTML = '<p class="card muted">No menus yet. Add one under Menu &amp; slots.</p>'; return; }
-    let q = sb.from("orders").select("*").eq("drop_id", drop).order("order_num", {ascending:false});
+    let q = sb.from("orders").select("*").eq("menu_id", drop).order("order_num", {ascending:false});
     q = view === "archived" ? q.not("archived_at", "is", null) : q.is("archived_at", null);
     if(view !== "active" && view !== "archived") q = q.eq("status", view);
     const {data:orders, error} = await q;
@@ -318,7 +318,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
   $("archiveBtn").addEventListener("click", async () => {
     const drop = $("dropPick").value;
     if(!confirm("Archive every picked-up and canceled order for this menu? They move to the Archived view.")) return;
-    await run(sb.from("orders").update({archived_at: new Date().toISOString()}).eq("drop_id", drop).is("archived_at", null).in("status", ["Picked up", "Canceled"]), "Archived").catch(() => {});
+    await run(sb.from("orders").update({archived_at: new Date().toISOString()}).eq("menu_id", drop).is("archived_at", null).in("status", ["Picked up", "Canceled"]), "Archived").catch(() => {});
     loadOrders();
   });
 
@@ -360,7 +360,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
     const rows = await run(sb.from("to_bake").select("*"));
     $("bakeList").innerHTML = rows.length
       ? '<table><thead><tr><th>Menu</th><th>Item</th><th class="num">To bake</th></tr></thead><tbody>' +
-        rows.map(r => '<tr><td>' + esc(r.drop) + '</td><td>' + esc(r.item) + '</td><td class="num"><b>' + r.to_bake + '</b></td></tr>').join("") + '</tbody></table>'
+        rows.map(r => '<tr><td>' + esc(r.menu) + '</td><td>' + esc(r.item) + '</td><td class="num"><b>' + r.to_bake + '</b></td></tr>').join("") + '</tbody></table>'
       : '<p class="muted">Nothing to bake yet.</p>';
   }
 
@@ -381,8 +381,8 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
       check("Active menu (customers order from this one; only one can be active)", "taking_orders", d.taking_orders) +
       '<div class="row" style="margin-top:12px"><button class="btn small">Save menu details</button></div></form>';
     const [items, slots] = await Promise.all([
-      run(sb.from("menu_items").select("*").eq("drop_id", id).order("sort").order("name")),
-      run(sb.from("slots").select("*").eq("drop_id", id).order("sort").order("slot_id"))]);
+      run(sb.from("menu_items").select("*").eq("menu_id", id).order("sort").order("name")),
+      run(sb.from("slots").select("*").eq("menu_id", id).order("sort").order("slot_id"))]);
     $("itemList").innerHTML = items.length ? items.map(i =>
       '<div class="item" data-id="' + esc(i.item_id) + '"><div class="edit">' +
         field("Name", "name", i.name, "text", "name") + field("Price", "price", i.price, "number") + field("Available", "available", i.available, "number") +
@@ -401,7 +401,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
     if(f.dataset.form === "drop"){
       const v = form(f), other = drops.find(x => x.taking_orders && x.id !== drop), me = drops.find(x => x.id === drop);
       if(v.taking_orders && !me.taking_orders && other && !confirm("Make " + (v.name || me.name) + " the active menu? " + other.name + " will stop taking orders.")) return;
-      await run(sb.from("drops").update(v).eq("id", drop), v.taking_orders && !me.taking_orders ? (v.name || me.name) + " is now the active menu" : "Menu saved");
+      await run(sb.from("menus").update(v).eq("id", drop), v.taking_orders && !me.taking_orders ? (v.name || me.name) + " is now the active menu" : "Menu saved");
       await loadDrops(); loadMenu();
     }
   });
@@ -413,7 +413,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
     if(!changed.length){ toast("No changes to save"); return; }
     btn.disabled = true; btn.textContent = "Saving…";
     try{
-      for(const c of changed) await run(sb.from(table).update(c.v).eq("drop_id", drop).eq(keyCol, c.id));
+      for(const c of changed) await run(sb.from(table).update(c.v).eq("menu_id", drop).eq(keyCol, c.id));
       toast(changed.length + " " + what + (changed.length === 1 ? "" : "s") + " saved");
       await loadMenu();
     }catch(err){ /* run() already showed the error; unsaved rows stay as typed */ }
@@ -425,18 +425,18 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
   $("addItem").addEventListener("click", async () => {
     const name = prompt("New item name"); if(!name) return;
     const drop = $("menuDropPick").value, id = slug(name) || ("item-" + Date.now());
-    await run(sb.from("menu_items").insert({drop_id: drop, item_id: id, name, price: 0, available: 0, show: false, sort: 99}), "Added. Set its price and stock, then tick Show.").catch(() => {});
+    await run(sb.from("menu_items").insert({menu_id: drop, item_id: id, name, price: 0, available: 0, show: false, sort: 99}), "Added. Set its price and stock, then tick Show.").catch(() => {});
     loadMenu();
   });
   $("addSlot").addEventListener("click", async () => {
     const label = prompt("New pickup time, e.g. Monday, 7 to 8 pm"); if(!label) return;
-    await run(sb.from("slots").insert({drop_id: $("menuDropPick").value, slot_id: slug(label) || ("slot-" + Date.now()), pickup_time: label, max_orders: 5, sort: 99}), "Pickup time added").catch(() => {});
+    await run(sb.from("slots").insert({menu_id: $("menuDropPick").value, slot_id: slug(label) || ("slot-" + Date.now()), pickup_time: label, max_orders: 5, sort: 99}), "Pickup time added").catch(() => {});
     loadMenu();
   });
   $("newDrop").addEventListener("click", async () => {
     const name = prompt("New menu name, e.g. Valentine's Menu"); if(!name) return;
     const id = slug(name) || ("drop-" + Date.now());
-    await run(sb.from("drops").insert({id, name, taking_orders: false, sort: drops.length + 1}), "Menu added. Customers won't see it until you make it the active menu.").catch(() => {});
+    await run(sb.from("menus").insert({id, name, taking_orders: false, sort: drops.length + 1}), "Menu added. Customers won't see it until you make it the active menu.").catch(() => {});
     await loadDrops(); $("menuDropPick").value = id; loadMenu();
   });
 
