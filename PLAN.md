@@ -23,11 +23,12 @@ Switching over happens only after testing. Then the live repo's `index.html` get
 ## Phases
 
 ### 1. Sheets backend (Apps Script)
-- Tabs: Settings, Drops, Items, Slots, Orders, OrderLines, Notify.
+- Same tabs and columns as the shop's existing sheet: Settings, Waitlist, Drops, Menu, Slots, Orders, OrderLines, Archive, To bake. The only addition is an "Order ID" column on Orders and Archive.
+- Setting Status to "Canceled" restocks the items automatically and stamps Restocked.
 - `doGet`: returns the menu JSON the page already expects (`ok, shopOpen, bakery, zelle, venmo, acceptCash, drops[items, slots]`), cached for a few seconds.
 - `doPost` order: takes `LockService` → re-checks the drop is open, items are in stock and the slot has room → assigns the order number → writes the order rows → decrements stock → releases the lock. If the lock isn't free, it returns `{busy:true}` and the page retries. If stock ran out, it returns `{ok:false, error, refresh:true}`.
 - Duplicate protection: each checkout sends a unique `orderId`. A retried or double-tapped order returns the original order instead of creating a second one.
-- `doPost` `action:"notify"`: appends to the Notify tab.
+- `doPost` `action:"notify"`: appends to the Waitlist tab.
 
 ### 2. Put it on the web
 - Free static hosting with a test URL. Later, optionally a custom domain such as `order.sourdoughbykat.com`.

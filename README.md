@@ -6,28 +6,40 @@ This is the new version of the ordering page. It's being built and tested separa
 |---|---|
 | `index.html` | The customer page (the "New look preview" design) |
 | `apps-script/Code.gs` | The backend that runs inside the Google Sheet |
-| `tests/run-backend-test.sh` | Offline test of the backend with a fake sheet |
+| `tests/run-backend-test.sh` | Offline test of the backend with a fake copy of the sheet |
 | `tests/rush_test.py` | Sends many orders at the same moment to the **test** backend |
 
-## Phase 1 setup: the test sheet and backend
+## The Google Sheet
 
-1. Go to https://sheets.new and name the new sheet **SBK v2 TEST**. Use a new sheet, not your live one.
-2. Open **Extensions → Apps Script**. Delete what's in `Code.gs` and paste in all of [apps-script/Code.gs](apps-script/Code.gs). Save.
-3. In the function menu at the top, pick `setup` and click **Run**. Allow access when Google asks. This creates these tabs, filled with the fall menu:
-   - **Settings:** `shopOpen`, Zelle and Venmo details, `acceptCash`, `nextOrderNum`
-   - **Drops:** each weekly drop. Tick `open` on the one taking orders.
-   - **Items:** the menu. `available` is how many are left. It goes down automatically with each order. Untick `show` to hide an item.
-   - **Slots:** pickup times and how many orders each `capacity` allows
-   - **Orders** and **OrderLines:** filled in automatically
-   - **Notify:** the "tell me when you reopen" list
-4. Click **Deploy → New deployment**. Choose the type **Web app**, set **Execute as: Me** and **Who has access: Anyone**, then click **Deploy**. Copy the **Web app URL**. It ends in `/exec`.
-5. In `index.html`, paste that URL into `const API_URL = "…"`. Use the test URL only, never the live shop's.
+v2 uses the same sheet layout the shop already has, so nothing changes for Kat:
 
-### Day-to-day in the sheet
-- **Open or close the shop:** `Settings → shopOpen`.
-- **Change stock:** edit `Items → available`. The site shows changes within about 15 seconds.
-- **Cancel an order:** set its `status` to `Cancelled`. That frees the pickup slot. Add the items back to `available` yourself.
-- **After editing Code.gs:** go to **Deploy → Manage deployments → Edit → Version: New version**. This keeps the same URL.
+| Tab | What's in it |
+|---|---|
+| **Settings** | Bakery name, Zelle email or phone, Zelle name, Venmo username, Shop open. Optional: add a row `Accept cash` = FALSE to hide cash. |
+| **Waitlist** | People who asked to be told when pre-orders reopen |
+| **Drops** | Each drop. Tick **Taking orders** on the one that's open. |
+| **Menu** | Items for each drop. **Available** goes down automatically with each order. Untick **Show** to hide an item. |
+| **Slots** | Pickup times and **Max orders** for each one |
+| **Orders** / **OrderLines** | Filled in automatically. v2 adds one column at the end of Orders: **Order ID**. |
+| **Archive** | Past orders. Order numbers keep counting up from here too. |
+| **To bake** | Unchanged. It still totals OrderLines. |
+
+**Day-to-day**
+- **Cancel an order:** set its **Status** to `Canceled`. Its items go straight back into **Available**, **Restocked** gets the time, and the pickup slot frees up.
+- **Website updates:** edits to Settings, Drops, Menu or Slots show on the website right away.
+- The sheet gets an **SBK** menu in the toolbar with "Restock canceled orders" and "Refresh the website menu now", in case you ever need them.
+
+## Phase 1 setup on the TEST copy
+
+Work only in the copy. The live sheet keeps its own code until we switch over.
+
+1. Open the **copy** of the sheet and go to **Extensions → Apps Script**.
+2. Select everything in the code file and delete it. That's the old code that came along with the copy. Paste in all of [apps-script/Code.gs](apps-script/Code.gs) and click **Save**.
+3. In the function menu at the top, pick **setup** and click **Run**. Allow access when Google asks. On your sheet, this only adds the **Order ID** column to Orders and Archive.
+4. Click **Deploy → New deployment**. Click the gear icon and choose **Web app**. Set **Execute as: Me** and **Who has access: Anyone**, then click **Deploy**. Copy the **Web app URL**. It ends in `/exec`.
+5. Send that URL to Claude. It goes into `index.html` as `API_URL`. Use the test URL only, never the live shop's.
+
+**After any later change to Code.gs:** go to **Deploy → Manage deployments**, click the pencil, set **Version: New version** and click **Deploy**. The URL stays the same.
 
 ## How orders stay correct when many people order at once
 - Only one order is written at a time. Each order re-checks stock and slot room just before it's saved, so nothing is oversold.
@@ -43,4 +55,4 @@ tests/run-backend-test.sh
 ```bash
 python3 tests/rush_test.py https://script.google.com/macros/s/YOUR_TEST_ID/exec 25
 ```
-The rush test refuses to run against the live shop's URL. Afterwards, delete the "Rush test" rows and reset the stock in the test sheet.
+The rush test refuses to run against the live shop's URL. Afterwards, delete the "Rush test" rows from Orders and OrderLines in the test copy and put **Available** back.
