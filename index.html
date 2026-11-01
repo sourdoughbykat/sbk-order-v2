@@ -349,7 +349,7 @@ label.f:first-child{margin-top:0}
 <body>
 <div class="wrap">
   <!-- TEST version banner. Remove at switch-over. -->
-  <p class="demo">Test version · orders go to the test sheet</p>
+  <p class="demo">Test version · orders go to the test database</p>
   <p class="demo" id="demoNote" hidden>Preview with the sample menu. Orders aren't saved.</p>
 
   <section class="welcome" id="welcome" aria-labelledby="wTitle">
@@ -458,12 +458,23 @@ label.f:first-child{margin-top:0}
 </aside>
 
 <script>
-/* ===== Paste the Web app URL from Apps Script between the quotes ===== */
-const API_URL = "https://script.google.com/macros/s/AKfycbxR1TSEC93XrsVSykZnvzdiDzP2SMaTXvJNb_7fXwZ7qy0lkfSJJUMd4QlDnD1h-bGR/exec"; /* TEST copy of the sheet, not the live shop */
-/* ===================================================================== */
+/* ===== Supabase project (Settings → API). The publishable/anon key is meant to be public. ===== */
+const SUPABASE_URL = "PASTE_SUPABASE_PROJECT_URL";
+const SUPABASE_KEY = "PASTE_SUPABASE_PUBLISHABLE_KEY";
+/* ============================================================================================ */
 
 (function(){
-  const DEMO = !/^https:\/\/script\.google\.com\//.test(API_URL);
+  const DEMO = !/^https:\/\/[a-z0-9-]+\.supabase\.co$/.test(SUPABASE_URL);
+  /* Calls one of the shop's database functions: get_menu, place_order or join_waitlist */
+  async function rpc(name, args){
+    const r = await fetch(SUPABASE_URL + "/rest/v1/rpc/" + name, {
+      method: "POST", cache: "no-store",
+      headers: {"apikey": SUPABASE_KEY, "Content-Type": "application/json"},
+      body: JSON.stringify(args || {})
+    });
+    if(!r.ok) throw new Error("rpc " + name + " " + r.status);
+    return r.json();
+  }
   const SAMPLE = {ok:true, acceptCash:true, bakery:"Sourdough by Kat", zelle:"sourdoughbykat@email.com", zelleName:"Kat", venmo:"sourdoughbykat", drops:[
     {id:"fall",name:"Fall Menu",pickup:"Pickup Monday, 4 to 7 pm",closes:"Orders close Sunday at 8 pm",open:true,items:[
       {id:"psl",name:"Pumpkin spice pumpkin loaf",desc:"Large loaf",price:20,qty:8,art:"🍞"},
@@ -534,7 +545,7 @@ const API_URL = "https://script.google.com/macros/s/AKfycbxR1TSEC93XrsVSykZnvzdi
     try{
       let j;
       if(DEMO){ j = data || JSON.parse(JSON.stringify(SAMPLE)); $("demoNote").hidden = location.hash !== "#menu"; }
-      else { const r = await fetch(API_URL, {cache:"no-store"}); j = await r.json(); if(!j.ok) throw 0; writeCache(j); }
+      else { j = await rpc("get_menu"); if(!j || !j.ok) throw 0; writeCache(j); }
       useData(j, keep || !!data);
     }catch(e){
       if(!data){
@@ -691,14 +702,12 @@ const API_URL = "https://script.google.com/macros/s/AKfycbxR1TSEC93XrsVSykZnvzdi
         const s = d.slots.find(x => x.id === form.slot); s.left--;
         j = {ok:true, num: demoNum++, total: cartTotal(), drop: d.name, pickup: s.label, pay: form.pay === "venmo" ? "Venmo" : form.pay === "cash" ? "Cash" : "Zelle", lines};
       } else {
-        /* If several people order at the same moment, wait a beat and quietly try again (up to 3 tries) */
+        /* The database saves orders one at a time; a dropped connection is retried with the same orderId, so it's never saved twice */
         if(!orderId) orderId = newOrderId();
-        const body = JSON.stringify({orderId, drop: active, items: cart, name: form.name, phone: form.phone, slot: form.slot, pay: form.pay});
-        for(let attempt = 0; attempt < 3; attempt++){
-          const r = await fetch(API_URL, {method:"POST", body});
-          j = await r.json();
-          if(!j.busy) break;
-          await new Promise(res => setTimeout(res, 1500 + attempt * 1500));
+        const p = {orderId, drop: active, items: cart, name: form.name, phone: form.phone, slot: form.slot, pay: form.pay};
+        for(let attempt = 0; ; attempt++){
+          try{ j = await rpc("place_order", {p}); break; }
+          catch(e){ if(attempt >= 2) throw e; await new Promise(res => setTimeout(res, 1500 + attempt * 1500)); }
         }
       }
       if(!j.ok){ showError(j.error || "Your order didn't go through. Try again."); if(j.refresh){ await load(true); renderSheet(); showError(j.error); } return; }
@@ -915,7 +924,7 @@ const API_URL = "https://script.google.com/macros/s/AKfycbxR1TSEC93XrsVSykZnvzdi
     btn.disabled = true; btn.textContent = "Signing you up…";
     try{
       let j = {ok:true};
-      if(!DEMO){ const r = await fetch(API_URL, {method:"POST", body: JSON.stringify({action:"notify", email, phone})}); j = await r.json(); }
+      if(!DEMO){ j = await rpc("join_waitlist", {p_email: email, p_phone: phone}); }
       if(!j.ok){ err.textContent = j.error || "That didn’t go through. Try again."; err.hidden = false; return; }
       $("notifyForm").hidden = true; $("notifyDone").hidden = false;
     }catch(x){
