@@ -4,14 +4,14 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Sourdough by Kat</title>
-<meta name="description" content="Small-batch, slow-fermented sourdough drops every week. Pre-order your loaves for pickup.">
+<meta name="description" content="Small-batch, slow-fermented sourdough. Pre-order your loaves for pickup.">
 <meta name="theme-color" content="#743D13">
 <!-- TEST version: keep it out of search results. Remove this line at switch-over. -->
 <meta name="robots" content="noindex, nofollow">
 <!-- Link preview for Instagram, iMessage, WhatsApp. Update og:url and og:image at switch-over. -->
 <meta property="og:type" content="website">
 <meta property="og:site_name" content="Sourdough by Kat">
-<meta property="og:title" content="Sourdough by Kat · This week's drop is open">
+<meta property="og:title" content="Sourdough by Kat · Pre-orders are open">
 <meta property="og:description" content="Small-batch, slow-fermented sourdough. Pre-order your loaves for pickup.">
 <meta property="og:url" content="https://sourdoughbykat.github.io/sbk-order-v2/">
 <meta property="og:image" content="https://sourdoughbykat.github.io/sbk-order-v2/img/share.png">
@@ -377,7 +377,7 @@ label.f:first-child{margin-top:0}
         <p class="err" id="nErr" role="alert" hidden></p>
         <button class="cta" id="nBtn" type="submit">Notify me</button>
       </form>
-      <div id="notifyDone" hidden><h2>You’re on the list! 🫶🏼</h2><p class="n-note">We’ll let you know as soon as the next drop opens.</p></div>
+      <div id="notifyDone" hidden><h2>You’re on the list! 🫶🏼</h2><p class="n-note">We’ll let you know as soon as pre-orders open again.</p></div>
     </div>
 
     <section class="ig" aria-labelledby="igTitle">
@@ -432,7 +432,7 @@ label.f:first-child{margin-top:0}
   <div id="shop" hidden>
     <nav class="drops" id="dropTabs" hidden></nav>
     <div class="info" id="dropInfo"></div>
-    <p class="closed" id="closedNote" hidden>Ordering for this drop is closed. Check back next week.</p>
+    <p class="closed" id="closedNote" hidden>This menu isn’t taking orders right now. Check back soon.</p>
     <div class="grid" id="menu"></div>
   </div>
   </div>
@@ -590,7 +590,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
     $("menuTitle").textContent = d.name || "This week’s menu";
     $("dropInfo").innerHTML = '<span><b>' + esc(d.pickup) + '</b></span>' + (d.open ? '<span>' + esc(d.closes) + '</span>' : "");
     $("closedNote").hidden = d.open;
-    if(!d.items.length){ $("menu").innerHTML = '<p class="status" style="grid-column:1/-1">The menu for this drop is coming soon.</p>'; return; }
+    if(!d.items.length){ $("menu").innerHTML = '<p class="status" style="grid-column:1/-1">This menu is coming soon.</p>'; return; }
     const featIdx = d.items.findIndex(i => i.qty > 0);
     const anyPhoto = d.items.some(i => photoOK[i.id]);
     $("menu").classList.remove("lead");
@@ -762,7 +762,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
   /* ---------- Events ---------- */
   $("dropTabs").addEventListener("click", e => {
     const b = e.target.closest("[data-drop]"); if(!b || b.dataset.drop === active) return;
-    if(cartCount() && !confirm("Switching drops clears your current order. Continue?")) return;
+    if(cartCount() && !confirm("Switching menus clears your current order. Continue?")) return;
     active = b.dataset.drop; cart = {}; form.slot = ""; render();
   });
   function stepClick(e){

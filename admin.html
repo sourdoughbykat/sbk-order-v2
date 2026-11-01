@@ -150,7 +150,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 
     <section data-panel="orders">
       <div class="bar">
-        <select class="in" id="dropPick" aria-label="Drop"></select>
+        <select class="in" id="dropPick" aria-label="Menu"></select>
         <select class="in" id="statusPick" aria-label="Show">
           <option value="active">Active orders</option>
           <option value="Awaiting payment">Awaiting payment</option>
@@ -163,7 +163,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       </div>
       <div class="stats" id="stats"></div>
       <div id="orderList"></div>
-      <button class="btn ghost" id="archiveBtn" style="width:100%">Archive picked-up and canceled orders for this drop</button>
+      <button class="btn ghost" id="archiveBtn" style="width:100%">Archive picked-up and canceled orders for this menu</button>
     </section>
 
     <section data-panel="bake" hidden>
@@ -172,8 +172,8 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
 
     <section data-panel="menu" hidden>
       <div class="bar">
-        <select class="in" id="menuDropPick" aria-label="Drop"></select>
-        <button class="btn ghost small" id="newDrop">+ New drop</button>
+        <select class="in" id="menuDropPick" aria-label="Menu"></select>
+        <button class="btn ghost small" id="newDrop">+ New menu</button>
       </div>
       <div class="card" id="dropCard"></div>
       <div class="card"><div class="card-head"><h2>Menu items</h2><button class="btn small" id="saveItems" data-label="Save menu">Save menu</button></div><div id="itemList"></div><button class="btn ghost small" id="addItem" style="margin-top:10px">+ Add item</button></div>
@@ -258,7 +258,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
   async function loadDrops(){
     drops = await run(sb.from("drops").select("*").order("sort").order("id"));
     const open = drops.find(d => d.taking_orders) || drops[0];
-    const opts = drops.map(d => '<option value="' + esc(d.id) + '">' + esc(d.name) + (d.taking_orders ? " (open)" : "") + '</option>').join("");
+    const opts = drops.map(d => '<option value="' + esc(d.id) + '">' + esc(d.name) + (d.taking_orders ? " (active)" : "") + '</option>').join("");
     [$("dropPick"), $("menuDropPick")].forEach(sel => { const prev = sel.value; sel.innerHTML = opts; sel.value = drops.some(d => d.id === prev) ? prev : (open ? open.id : ""); });
   }
 
@@ -267,7 +267,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
   $("refresh").addEventListener("click", () => loadOrders());
   async function loadOrders(quiet){
     const drop = $("dropPick").value, view = $("statusPick").value;
-    if(!drop){ $("orderList").innerHTML = '<p class="card muted">No drops yet. Add one under Menu &amp; slots.</p>'; return; }
+    if(!drop){ $("orderList").innerHTML = '<p class="card muted">No menus yet. Add one under Menu &amp; slots.</p>'; return; }
     let q = sb.from("orders").select("*").eq("drop_id", drop).order("order_num", {ascending:false});
     q = view === "archived" ? q.not("archived_at", "is", null) : q.is("archived_at", null);
     if(view !== "active" && view !== "archived") q = q.eq("status", view);
@@ -317,7 +317,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
   });
   $("archiveBtn").addEventListener("click", async () => {
     const drop = $("dropPick").value;
-    if(!confirm("Archive every picked-up and canceled order for this drop? They move to the Archived view.")) return;
+    if(!confirm("Archive every picked-up and canceled order for this menu? They move to the Archived view.")) return;
     await run(sb.from("orders").update({archived_at: new Date().toISOString()}).eq("drop_id", drop).is("archived_at", null).in("status", ["Picked up", "Canceled"]), "Archived").catch(() => {});
     loadOrders();
   });
@@ -359,7 +359,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
   async function loadBake(){
     const rows = await run(sb.from("to_bake").select("*"));
     $("bakeList").innerHTML = rows.length
-      ? '<table><thead><tr><th>Drop</th><th>Item</th><th class="num">To bake</th></tr></thead><tbody>' +
+      ? '<table><thead><tr><th>Menu</th><th>Item</th><th class="num">To bake</th></tr></thead><tbody>' +
         rows.map(r => '<tr><td>' + esc(r.drop) + '</td><td>' + esc(r.item) + '</td><td class="num"><b>' + r.to_bake + '</b></td></tr>').join("") + '</tbody></table>'
       : '<p class="muted">Nothing to bake yet.</p>';
   }
@@ -374,12 +374,12 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
 
   async function loadMenu(){
     const id = $("menuDropPick").value, d = drops.find(x => x.id === id);
-    if(!d){ $("dropCard").innerHTML = '<p class="muted">No drops yet. Tap “+ New drop”.</p>'; $("itemList").innerHTML = $("slotList").innerHTML = ""; return; }
-    $("dropCard").innerHTML = '<h2>Drop</h2><form data-form="drop"><div class="edit">' +
+    if(!d){ $("dropCard").innerHTML = '<p class="muted">No menus yet. Tap “+ New menu”.</p>'; $("itemList").innerHTML = $("slotList").innerHTML = ""; return; }
+    $("dropCard").innerHTML = '<h2>Menu</h2><form data-form="drop"><div class="edit">' +
       field("Name", "name", d.name) + field("Pickup", "pickup", d.pickup) +
       field("Order deadline", "order_deadline", d.order_deadline, "text", "full") + '</div>' +
-      check("Taking orders (shows on the website)", "taking_orders", d.taking_orders) +
-      '<div class="row" style="margin-top:12px"><button class="btn small">Save drop</button></div></form>';
+      check("Active menu (customers order from this one; only one can be active)", "taking_orders", d.taking_orders) +
+      '<div class="row" style="margin-top:12px"><button class="btn small">Save menu details</button></div></form>';
     const [items, slots] = await Promise.all([
       run(sb.from("menu_items").select("*").eq("drop_id", id).order("sort").order("name")),
       run(sb.from("slots").select("*").eq("drop_id", id).order("sort").order("slot_id"))]);
@@ -398,7 +398,12 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
   document.querySelector('[data-panel="menu"]').addEventListener("submit", async e => {
     e.preventDefault();
     const f = e.target, drop = $("menuDropPick").value;
-    if(f.dataset.form === "drop"){ await run(sb.from("drops").update(form(f)).eq("id", drop), "Drop saved"); await loadDrops(); }
+    if(f.dataset.form === "drop"){
+      const v = form(f), other = drops.find(x => x.taking_orders && x.id !== drop), me = drops.find(x => x.id === drop);
+      if(v.taking_orders && !me.taking_orders && other && !confirm("Make " + (v.name || me.name) + " the active menu? " + other.name + " will stop taking orders.")) return;
+      await run(sb.from("drops").update(v).eq("id", drop), v.taking_orders && !me.taking_orders ? (v.name || me.name) + " is now the active menu" : "Menu saved");
+      await loadDrops(); loadMenu();
+    }
   });
   /* One Save for all menu items, one Save for all pickup times */
   async function saveAll(listId, table, keyCol, btn, what){
@@ -429,9 +434,9 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
     loadMenu();
   });
   $("newDrop").addEventListener("click", async () => {
-    const name = prompt("New drop name, e.g. Pizza Friday"); if(!name) return;
+    const name = prompt("New menu name, e.g. Valentine's Menu"); if(!name) return;
     const id = slug(name) || ("drop-" + Date.now());
-    await run(sb.from("drops").insert({id, name, taking_orders: false, sort: drops.length + 1}), "Drop added. It's hidden until you tick Taking orders.").catch(() => {});
+    await run(sb.from("drops").insert({id, name, taking_orders: false, sort: drops.length + 1}), "Menu added. Customers won't see it until you make it the active menu.").catch(() => {});
     await loadDrops(); $("menuDropPick").value = id; loadMenu();
   });
 
