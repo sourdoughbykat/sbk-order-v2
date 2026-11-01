@@ -423,6 +423,9 @@ function setup() {
     const sh = ss.getSheetByName(name);
     const keys = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getValues()[0].map(key_);
     if (keys.indexOf("orderid") < 0) sh.getRange(1, keys.filter(String).length + 1).setValue("Order ID").setFontWeight("bold");
+    // Placed always shows the time, not just the date.
+    const placed = keys.indexOf("placed") + 1;
+    if (placed) sh.getRange(2, placed, sh.getMaxRows() - 1, 1).setNumberFormat(PLACED_FORMAT);
   });
   clearMenuCache();
 }

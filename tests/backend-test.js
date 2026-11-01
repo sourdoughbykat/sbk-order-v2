@@ -32,7 +32,8 @@ FakeSheet.prototype = {
     };
     return api;
   },
-  setFrozenRows: function () {}
+  setFrozenRows: function () {},
+  getMaxRows: function () { return Math.max(this.data.length, 1000); }
 };
 
 /* The shop's sheet as it is today (copied layout, test data) */
@@ -137,6 +138,7 @@ function order(over) {
 out("setup on the shop's existing sheet");
 setup();
 check("adds an Order ID column to Orders", sheets.Orders.data[0][13] === "Order ID");
+check("setup formats Placed with date and time", sheets.Orders.formats && sheets.Orders.formats["2:2"] === "M/d/yyyy H:mm:ss" && sheets.Archive.formats["2:2"] === "M/d/yyyy H:mm:ss");
 check("adds an Order ID column to Archive", sheets.Archive.data[0][13] === "Order ID");
 check("doesn't touch other tabs", sheets.Menu.data.length === 9 && sheets.Settings.data.length === 6 && sheets.Waitlist.data.length === 1);
 setup();
