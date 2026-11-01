@@ -80,6 +80,8 @@ td.num,th.num{text-align:right}
 @media (max-width:560px){.edit{grid-template-columns:1fr}}
 .edit .full{grid-column:1/-1}
 .item{border-top:1px solid var(--line);padding:12px 0}
+.card-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}
+.card-head h2{margin:0}
 .item:first-of-type{border-top:0;padding-top:0}
 .item .edit{grid-template-columns:2fr 1fr 1fr}
 @media (max-width:560px){.item .edit{grid-template-columns:1fr 1fr}.item .edit .name{grid-column:1/-1}}
@@ -149,8 +151,8 @@ td.num,th.num{text-align:right}
         <button class="btn ghost small" id="newDrop">+ New drop</button>
       </div>
       <div class="card" id="dropCard"></div>
-      <div class="card"><h2>Menu items</h2><div id="itemList"></div><button class="btn ghost small" id="addItem" style="margin-top:10px">+ Add item</button></div>
-      <div class="card"><h2>Pickup times</h2><div id="slotList"></div><button class="btn ghost small" id="addSlot" style="margin-top:10px">+ Add pickup time</button></div>
+      <div class="card"><div class="card-head"><h2>Menu items</h2><button class="btn small" id="saveItems" data-label="Save menu">Save menu</button></div><div id="itemList"></div><button class="btn ghost small" id="addItem" style="margin-top:10px">+ Add item</button></div>
+      <div class="card"><div class="card-head"><h2>Pickup times</h2><button class="btn small" id="saveSlots" data-label="Save pickup times">Save pickup times</button></div><div id="slotList"></div><button class="btn ghost small" id="addSlot" style="margin-top:10px">+ Add pickup time</button></div>
     </section>
 
     <section data-panel="settings" hidden>
@@ -308,23 +310,38 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
       run(sb.from("menu_items").select("*").eq("drop_id", id).order("sort").order("name")),
       run(sb.from("slots").select("*").eq("drop_id", id).order("sort").order("slot_id"))]);
     $("itemList").innerHTML = items.length ? items.map(i =>
-      '<form class="item" data-form="item" data-id="' + esc(i.item_id) + '"><div class="edit">' +
+      '<div class="item" data-id="' + esc(i.item_id) + '"><div class="edit">' +
         field("Name", "name", i.name, "text", "name") + field("Price", "price", i.price, "number") + field("Available", "available", i.available, "number") +
         field("Description", "description", i.description, "text", "name") + field("Emoji", "emoji", i.emoji) + field("Sort", "sort", i.sort, "number") + '</div>' +
-        '<div class="row" style="justify-content:space-between;margin-top:8px">' + check("Show on menu", "show", i.show) +
-        '<button class="btn small">Save</button></div></form>').join("") : '<p class="muted">No items yet.</p>';
+        check("Show on menu", "show", i.show) + '</div>').join("") : '<p class="muted">No items yet.</p>';
     $("slotList").innerHTML = slots.length ? slots.map(s =>
-      '<form class="item" data-form="slot" data-id="' + esc(s.slot_id) + '"><div class="edit" style="grid-template-columns:2fr 1fr 1fr">' +
+      '<div class="item" data-id="' + esc(s.slot_id) + '"><div class="edit" style="grid-template-columns:2fr 1fr 1fr">' +
         field("Pickup time", "pickup_time", s.pickup_time, "text", "name") + field("Max orders", "max_orders", s.max_orders, "number") + field("Sort", "sort", s.sort, "number") +
-        '</div><div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn small">Save</button></div></form>').join("") : '<p class="muted">No pickup times yet.</p>';
+        '</div></div>').join("") : '<p class="muted">No pickup times yet.</p>';
+    /* Remember what each row looked like, so Save only sends the rows that changed */
+    document.querySelectorAll("#itemList [data-id], #slotList [data-id]").forEach(r => r.dataset.orig = JSON.stringify(form(r)));
   }
   document.querySelector('[data-panel="menu"]').addEventListener("submit", async e => {
     e.preventDefault();
-    const f = e.target, kind = f.dataset.form, drop = $("menuDropPick").value, v = form(f);
-    if(kind === "drop"){ await run(sb.from("drops").update(v).eq("id", drop), "Drop saved"); await loadDrops(); }
-    if(kind === "item") await run(sb.from("menu_items").update(v).eq("drop_id", drop).eq("item_id", f.dataset.id), "Item saved");
-    if(kind === "slot") await run(sb.from("slots").update(v).eq("drop_id", drop).eq("slot_id", f.dataset.id), "Pickup time saved");
+    const f = e.target, drop = $("menuDropPick").value;
+    if(f.dataset.form === "drop"){ await run(sb.from("drops").update(form(f)).eq("id", drop), "Drop saved"); await loadDrops(); }
   });
+  /* One Save for all menu items, one Save for all pickup times */
+  async function saveAll(listId, table, keyCol, btn, what){
+    const drop = $("menuDropPick").value;
+    const changed = [...$(listId).querySelectorAll("[data-id]")].map(r => ({id: r.dataset.id, v: form(r), orig: r.dataset.orig}))
+      .filter(c => JSON.stringify(c.v) !== c.orig);
+    if(!changed.length){ toast("No changes to save"); return; }
+    btn.disabled = true; btn.textContent = "Saving…";
+    try{
+      for(const c of changed) await run(sb.from(table).update(c.v).eq("drop_id", drop).eq(keyCol, c.id));
+      toast(changed.length + " " + what + (changed.length === 1 ? "" : "s") + " saved");
+      await loadMenu();
+    }catch(err){ /* run() already showed the error; unsaved rows stay as typed */ }
+    finally{ btn.disabled = false; btn.textContent = btn.dataset.label; }
+  }
+  $("saveItems").addEventListener("click", e => saveAll("itemList", "menu_items", "item_id", e.currentTarget, "item"));
+  $("saveSlots").addEventListener("click", e => saveAll("slotList", "slots", "slot_id", e.currentTarget, "pickup time"));
   const slug = s => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 30);
   $("addItem").addEventListener("click", async () => {
     const name = prompt("New item name"); if(!name) return;
