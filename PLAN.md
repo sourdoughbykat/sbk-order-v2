@@ -1,63 +1,46 @@
-# Sourdough by Kat — ordering web app (v2)
+# Sourdough by Kat: plan and status
 
-A mobile-friendly web page where customers order from a link, with nothing to install. Orders land in Google Sheets through Apps Script and stay correct when many people order at once.
+How the app is built and how to publish: see `CLAUDE.md`.
 
-Starting design: the "New look preview" artifact (https://claude.ai/artifact/2MjxA2bNqqdz3yHW9gW9KQ).
+## History
+- **Nov 1, 2026:** first built on Google Sheets + Apps Script (rush-tested), then moved to **Supabase**. Switched the live site over at 12:59 PM, and customers launched at 3 PM. Same link: sourdoughbykat.github.io.
+- **Since then:**
+  - seasonal menus replace weekly "drops" (one active at a time)
+  - "drops" renamed to "menus" in the database
+  - Kat's View: passcode sign-in, OPEN/CLOSED sign, delete with passcode, remove pickup times, text the waitlist, **Text customers** in the Orders tab
+  - checkout now requires an **email**
+  - home-screen icons: shop "SBK", kitchen "Kat's View"
+- The rush tests on Supabase passed: 25 orders at once, no overselling, slowest wait 0.4 s.
 
-## Rule #1: keep the live shop untouched
+## Where we left off (Nov 8, 2026)
 
-The live shop is https://sourdoughbykat.github.io, built from the `sourdoughbykat/sourdoughbykat.github.io` repo. Its page sends orders to the live Apps Script web app.
+### Next: make Kat's View "Kat-proof" (approved idea, not built yet)
+Kat doesn't know how the database works, so the screens should make the right choice for her:
+1. **Renaming an item that has orders** asks: "Same product, new name?" (rename) or "A different product?" (add a new item and hide the old one). Items never ordered rename quietly.
+2. **A "Hidden / out of season" section** at the bottom of each menu, with **Bring back** (asks for new stock). **+ Add item** warns if the name matches a hidden item ("Bring it back instead?").
+3. **Safe delete for items:** a real Delete only for items with no orders. Items with orders can only be hidden, with a short note explaining why.
+4. **Group To bake (and future reports) by item_id** with the current name, so a rename never shows as two lines. Today `to_bake` groups by `menu_name, item_name`.
+5. **One-line hints** next to risky controls (Hide, Active menu, Delete).
 
-This project uses its own copy of everything:
+Known data quirk: item `pumpkin-spice-loaf` was renamed to "Mini Choco Chip Muffins" (a different product reusing an ID). Ask the user before changing it.
 
-| | Live (do not touch) | v2 (this project) |
-|---|---|---|
-| Code | `sourdoughbykat.github.io` repo | this folder → new repo (e.g. `sbk-order-v2`) |
-| Web address | sourdoughbykat.github.io | test URL (Netlify / GitHub Pages project site) |
-| Google Sheet | current sheet | **copy** of the sheet, renamed "SBK v2 TEST" |
-| Apps Script | current deployment | new deployment bound to the copy |
-| `API_URL` in the page | live `/exec` URL | the v2 `/exec` URL only, never the live one |
+### After that
+- **Reports tab** in Kat's View, plus report views in Supabase: best sellers, sales over time, by menu, pickup times, payments, customers, cancellations, past-order search, CSV download. Group items by item_id.
+- **Confirmation emails:** needs a domain + Resend (free tier); checkout already collects email. Optionally a "new order" email to Kat (no domain needed).
+- **Domain** decision (also needed for email). The user was going to decide.
+- **Optional:**
+  - "Add pickup to calendar" button on the receipt
+  - a paid texting service (SimpleTexting / ClickSend) if automatic texts are wanted; today Kat texts from her own phone via Kat's View
+  - change history log
+  - weekly CSV backup
+- **Security hardening still open:**
+  - limit orders per phone per menu
+  - phone number format check
+  - Cloudflare Turnstile anti-bot check
+  - 2-step verification on Google, GitHub and Supabase (the user does this)
+- **Waitlist tab:** built before the user clarified they meant customers who ordered. They may want it removed. Ask.
 
-Switching over happens only after testing. Then the live repo's `index.html` gets the new page and the new Apps Script URL, in one change that can be reverted.
-
-## Phases
-
-### 1. Sheets backend (Apps Script)
-- Same tabs and columns as the shop's existing sheet: Settings, Waitlist, Drops, Menu, Slots, Orders, OrderLines, Archive, To bake. The only addition is an "Order ID" column on Orders and Archive.
-- Setting Status to "Canceled" restocks the items automatically and stamps Restocked.
-- `doGet`: returns the menu JSON the page already expects (`ok, shopOpen, bakery, zelle, venmo, acceptCash, drops[items, slots]`), cached for a few seconds.
-- `doPost` order: takes `LockService` → re-checks the drop is open, items are in stock and the slot has room → assigns the order number → writes the order rows → decrements stock → releases the lock. If the lock isn't free, it returns `{busy:true}` and the page retries. If stock ran out, it returns `{ok:false, error, refresh:true}`.
-- Duplicate protection: each checkout sends a unique `orderId`. A retried or double-tapped order returns the original order instead of creating a second one.
-- `doPost` `action:"notify"`: appends to the Waitlist tab.
-
-### 2. Put it on the web
-- Free static hosting with a test URL. Later, optionally a custom domain such as `order.sourdoughbykat.com`.
-- Link preview (logo + "This week's drop is open") for Instagram, iMessage and WhatsApp.
-- A QR code for flyers and pickup bags.
-- Compressed photos in `photos/<item-id>.png`.
-
-### 3. Baker view for Kat (optional for v1)
-Orders as they arrive, mark paid or picked up, a "what to bake" total, and open/close the shop. The sheet stays the single source of truth.
-
-### 4. Testing before switching over
-- Send 20+ simultaneous orders. Stock must never go below zero and order numbers must never repeat.
-  - ✅ Nov 1, 2026, on the TEST copy: 25 at once. All 11 places filled with no repeated numbers and no oversold stock or slots. The other 14 were correctly told their slot was full, nobody was left on "busy", and the slowest wait was 22.5 s.
-- Test on a real iPhone (Safari) and a real Android phone (Chrome).
-- Soft launch with a few friends on the test URL.
-
-## Where we left off (Nov 1, 2026)
-- ✅ Phase 1 is done and rush-tested. Phase 2's test page is online at https://sourdoughbykat.github.io/sbk-order-v2/ and uses the TEST copy of the sheet.
-- The live shop is untouched. The switch-over plan is to replace the live page in place, between drops, after Monday's pickup.
-- Decisions for next time:
-  1. **Domain:** buy your own domain (recommended) or use a free `*.pages.dev` address
-  2. **Security hardening:**
-     - You do: 2-step verification on Google and GitHub; check sheet sharing (only Kat and you as editors, link sharing off)
-     - Code: limit open orders per phone per drop, check phone numbers, cap request size, dedupe the waitlist, `@OnlyCurrentDoc`, clear real customer rows from the TEST copy
-     - Optional: Cloudflare Turnstile anti-bot check (needs a free Cloudflare account)
-     - Skip unless needed: a rate-limiting gateway
-  3. **Optional:** Kat's baker page (mark paid, picked up, complete)
-
-## Open questions
-- [ ] Is Kat's baker view in v1?
-- [ ] Hosting and domain: a free test URL now, a custom domain later?
-- [ ] Payments: keep Zelle, Venmo and cash for v1 (Stripe later)?
+### Decisions already made
+- Payments stay Zelle / Venmo / Cash (no card payments).
+- Site stays on GitHub Pages at sourdoughbykat.github.io until a domain is bought.
+- Old Google Sheet + Apps Script are retired. Keep them, but don't use them.
