@@ -104,7 +104,13 @@ textarea.in{resize:vertical;min-height:110px;line-height:1.4}
 .wl small{display:block;color:var(--muted);font-size:12px;font-weight:600}
 .wl.done b{color:var(--muted)}
 .wl-acts{display:flex;gap:6px;align-items:center;flex:0 0 auto;margin-left:auto}
-.wl-acts a.btn{text-decoration:none;display:inline-block}
+.wl-acts a.btn,.o-acts a.btn{text-decoration:none;display:inline-block}
+details.card > summary{cursor:pointer;font-weight:800;font-size:16px;list-style:none;display:flex;justify-content:space-between;align-items:center}
+details.card > summary::-webkit-details-marker{display:none}
+details.card > summary::after{content:"＋";color:var(--muted)}
+details.card[open] > summary::after{content:"−"}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-top:8px}
+.chips button{border:1.5px solid var(--line);background:var(--bg);border-radius:999px;padding:4px 10px;font-size:13px;font-weight:700}
 /* Storefront strip: link to the shop and the open/closed sign */
 .front{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--card);border-radius:20px;padding:12px 14px;margin-bottom:12px}
 .shoplink{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font-weight:800}
@@ -185,6 +191,20 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
         </select>
         <button class="btn ghost small" id="refresh">Refresh</button>
       </div>
+      <details class="card" id="textBox">
+        <summary>Text customers</summary>
+        <p class="muted" style="margin:8px 0 0">Write a message, then tap <b>Text</b> on an order below. Messages opens on your phone with it filled in for that customer. Texts come from your own number.</p>
+        <label class="f" for="orderMsg">Your message</label>
+        <textarea class="in" id="orderMsg" rows="4" placeholder="e.g. Hi {name}! Your order {order} is ready for pickup {pickup}. See you soon!"></textarea>
+        <div class="chips" aria-label="Fill in for each customer">
+          <button type="button" data-insert="{name}">+ first name</button>
+          <button type="button" data-insert="{order}">+ order #</button>
+          <button type="button" data-insert="{pickup}">+ pickup time</button>
+          <button type="button" data-insert="{items}">+ items</button>
+          <button type="button" data-insert="{total}">+ total</button>
+        </div>
+        <p class="muted" id="orderMsgCount" style="font-size:13px;margin:8px 0 0"></p>
+      </details>
       <div class="stats" id="stats"></div>
       <div id="orderList"></div>
       <button class="btn ghost" id="archiveBtn" style="width:100%">Archive picked-up and canceled orders for this menu</button>
@@ -367,6 +387,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
     q = view === "archived" ? q.not("archived_at", "is", null) : q.is("archived_at", null);
     if(view !== "active" && view !== "archived") q = q.eq("status", view);
     const {data:orders, error} = await q;
+    if(orders) shownOrders = orders;
     if(error){ if(!quiet) toast("Couldn't load orders: " + error.message); return; }
     const all = view === "active" ? orders : null;
     if(all){
@@ -391,11 +412,14 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
       if(o.status !== "Awaiting payment") acts.push('<button class="btn ghost small" data-status="Awaiting payment" data-num="' + o.order_num + '">Undo</button>');
       acts.push('<button class="btn ghost small" data-status="Canceled" data-num="' + o.order_num + '">Cancel order</button>');
     }
+    if(o.phone && o.status !== "Canceled") acts.push('<a class="btn ghost small" href="#" data-otext="' + o.order_num + '">' + (o.last_texted_at ? "Text again" : "Text") + '</a>');
     acts.push('<button class="btn link small" data-del="' + o.order_num + '">Delete</button>');
     const badge = o.status === "Picked up" ? "Picked" : o.status === "Awaiting payment" ? "" : o.status;
     return '<article class="order' + (o.status === "Canceled" ? " canceled" : "") + '">' +
       '<div class="o-head"><b>#' + o.order_num + ' ' + esc(o.customer_name) + '</b><span class="badge ' + badge + '">' + esc(o.status) + '</span></div>' +
-      '<div class="o-sub">' + esc(o.pickup) + ' · <a href="tel:' + esc(String(o.phone).replace(/[^\d+]/g, "")) + '">' + esc(o.phone) + '</a> · ' + esc(when(o.placed_at)) + '</div>' +
+      '<div class="o-sub">' + esc(o.pickup) + ' · <a href="tel:' + esc(String(o.phone).replace(/[^\d+]/g, "")) + '">' + esc(o.phone) + '</a>' +
+        (o.email ? ' · <a href="mailto:' + esc(o.email) + '">' + esc(o.email) + '</a>' : '') + ' · ' + esc(when(o.placed_at)) +
+        (o.last_texted_at ? ' · <b>texted ' + esc(when(o.last_texted_at)) + '</b>' : '') + '</div>' +
       '<div class="o-items">' + esc(o.items_summary) + '</div>' +
       '<div class="o-sub"><b style="color:var(--ink)">' + money(o.total) + '</b> by ' + esc(o.payment) +
         (o.restocked_at ? ' · items put back ' + esc(when(o.restocked_at)) : '') + (o.archived_at ? ' · archived' : '') + '</div>' +
@@ -403,6 +427,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
   }
   $("orderList").addEventListener("click", async e => {
     const del = e.target.closest("[data-del]"); if(del){ askDelete(+del.dataset.del); return; }
+    const tx = e.target.closest("[data-otext]"); if(tx){ textOrder(tx, e); return; }
     const b = e.target.closest("[data-status]"); if(!b) return;
     const num = +b.dataset.num, status = b.dataset.status;
     if(status === "Canceled" && !confirm("Cancel order #" + num + "? Its items go back on the menu.")) return;
@@ -416,6 +441,35 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
     await run(sb.from("orders").update({archived_at: new Date().toISOString()}).eq("menu_id", drop).is("archived_at", null).in("status", ["Picked up", "Canceled"]), "Archived").catch(() => {});
     loadOrders();
   });
+
+  /* ---------- Text customers about their orders, from Kat's own phone ---------- */
+  let shownOrders = [];
+  const ORDER_DRAFT_KEY = "sbk-kitchen-order-text";
+  try{ $("orderMsg").value = localStorage.getItem(ORDER_DRAFT_KEY) || ""; }catch(e){}
+  function countOrderMsg(){ const n = $("orderMsg").value.length; $("orderMsgCount").textContent = n ? n + " characters before names and details are filled in" : ""; }
+  $("orderMsg").addEventListener("input", () => { try{ localStorage.setItem(ORDER_DRAFT_KEY, $("orderMsg").value); }catch(e){} countOrderMsg(); });
+  countOrderMsg();
+  document.querySelector("#textBox .chips").addEventListener("click", e => {
+    const b = e.target.closest("[data-insert]"); if(!b) return;
+    const t = $("orderMsg"), at = t.selectionStart != null ? t.selectionStart : t.value.length;
+    t.value = t.value.slice(0, at) + b.dataset.insert + t.value.slice(t.selectionEnd != null ? t.selectionEnd : at);
+    t.dispatchEvent(new Event("input")); t.focus(); t.selectionStart = t.selectionEnd = at + b.dataset.insert.length;
+  });
+  /* {name} {order} {pickup} {items} {total} become this customer's details */
+  const fillFor = (msg, o) => msg
+    .replace(/\{name\}/g, String(o.customer_name || "").trim().split(/\s+/)[0])
+    .replace(/\{order\}/g, "#" + o.order_num)
+    .replace(/\{pickup\}/g, o.pickup || "")
+    .replace(/\{items\}/g, o.items_summary || "")
+    .replace(/\{total\}/g, money(o.total));
+  function textOrder(a, e){
+    const msg = $("orderMsg").value.trim(), o = shownOrders.find(x => x.order_num === +a.dataset.otext);
+    if(!msg || !o){ e.preventDefault(); $("textBox").open = true; toast("Write your message first"); $("orderMsg").focus(); return; }
+    a.href = "sms:" + smsNumber(o.phone) + "?&body=" + encodeURIComponent(fillFor(msg, o));
+    const now = new Date().toISOString(); o.last_texted_at = now;
+    sb.from("orders").update({last_texted_at: now}).eq("order_num", o.order_num).then(r => { if(r.error) toast("Couldn't mark as texted: " + r.error.message); });
+    setTimeout(() => { a.textContent = "Text again"; }, 600);
+  }
 
   /* ---------- Delete an order (needs the passcode, checked by the database) ---------- */
   let delNum = null;
