@@ -94,6 +94,17 @@ td.num,th.num{text-align:right}
 .chk input{width:20px;height:20px}
 .login{max-width:420px;margin:12vh auto 0}
 .login a{color:var(--solid);font-weight:700}
+/* Waitlist texting */
+textarea.in{resize:vertical;min-height:110px;line-height:1.4}
+.wl{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:8px 10px;padding:12px 0;border-top:1px solid var(--line)}
+.wl > div:first-child{flex:1 1 200px;min-width:0}
+.wl > div:first-child small{overflow-wrap:anywhere}
+.wl:first-child{border-top:0}
+.wl b{display:block;font-size:15px}
+.wl small{display:block;color:var(--muted);font-size:12px;font-weight:600}
+.wl.done b{color:var(--muted)}
+.wl-acts{display:flex;gap:6px;align-items:center;flex:0 0 auto;margin-left:auto}
+.wl-acts a.btn{text-decoration:none;display:inline-block}
 /* Storefront strip: link to the shop and the open/closed sign */
 .front{display:flex;justify-content:space-between;align-items:center;gap:12px;background:var(--card);border-radius:20px;padding:12px 14px;margin-bottom:12px}
 .shoplink{display:flex;align-items:center;gap:10px;color:var(--ink);text-decoration:none;font-weight:800}
@@ -157,6 +168,7 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       <button role="tab" data-tab="orders" aria-selected="true">Orders</button>
       <button role="tab" data-tab="bake" aria-selected="false">To bake</button>
       <button role="tab" data-tab="menu" aria-selected="false">Menu &amp; slots</button>
+      <button role="tab" data-tab="waitlist" aria-selected="false">Waitlist</button>
       <button role="tab" data-tab="settings" aria-selected="false">Shop settings</button>
     </nav>
 
@@ -190,6 +202,23 @@ dialog::backdrop{background:rgba(0,0,0,.4)}
       <div class="card" id="dropCard"></div>
       <div class="card"><div class="card-head"><h2>Menu items</h2><button class="btn small" id="saveItems" data-label="Save menu">Save menu</button></div><div id="itemList"></div><button class="btn ghost small" id="addItem" style="margin-top:10px">+ Add item</button></div>
       <div class="card"><div class="card-head"><h2>Pickup times</h2><button class="btn small" id="saveSlots" data-label="Save pickup times">Save pickup times</button></div><div id="slotList"></div><button class="btn ghost small" id="addSlot" style="margin-top:10px">+ Add pickup time</button></div>
+    </section>
+
+    <section data-panel="waitlist" hidden>
+      <div class="card">
+        <h2>Text the waitlist</h2>
+        <p class="muted" style="margin-top:-4px">Write your message, then tap <b>Text</b> next to each person. Messages opens on your phone with it filled in. Tap Send, then come back for the next one. Texts come from your own number.</p>
+        <label class="f" for="blastMsg">Your message</label>
+        <textarea class="in" id="blastMsg" rows="5" placeholder="e.g. The Holiday Menu is open! Pre-order here: sourdoughbykat.github.io"></textarea>
+        <div class="row" style="justify-content:space-between;margin-top:8px">
+          <button type="button" class="btn ghost small" id="addLink">+ Add shop link</button>
+          <span class="muted" id="msgCount" style="font-size:13px"></span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h2>Waitlist</h2><span class="muted" id="wlCount" style="font-size:13px;font-weight:700"></span></div>
+        <div id="wlList"></div>
+      </div>
     </section>
 
     <section data-panel="settings" hidden>
@@ -318,6 +347,7 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
     if(name === "bake") loadBake();
     if(name === "menu") loadMenu();
     if(name === "settings") loadSettings();
+    if(name === "waitlist") loadWaitlist();
   }
 
   async function loadDrops(){
@@ -520,6 +550,69 @@ const SUPABASE_KEY = "sb_publishable_PBgviD8pnp4JQgwUSM8aKg_ZSD3R7yU";
     const id = slug(name) || ("drop-" + Date.now());
     await run(sb.from("menus").insert({id, name, taking_orders: false, sort: drops.length + 1}), "Menu added. Customers won't see it until you make it the active menu.").catch(() => {});
     await loadDrops(); $("menuDropPick").value = id; loadMenu();
+  });
+
+  /* ---------- Waitlist: text people from Kat's own phone ---------- */
+  const DRAFT_KEY = "sbk-kitchen-text-draft";
+  const shopLink = () => ("https://" + location.host + location.pathname.replace(/admin\.html$/, "")).replace(/\/$/, "");
+  let waitlist = [];
+  try{ $("blastMsg").value = localStorage.getItem(DRAFT_KEY) || ""; }catch(e){}
+  function countMsg(){
+    const n = $("blastMsg").value.length;
+    $("msgCount").textContent = n ? n + " characters" + (n > 160 ? " · may arrive as 2 texts" : "") : "";
+  }
+  $("blastMsg").addEventListener("input", () => { try{ localStorage.setItem(DRAFT_KEY, $("blastMsg").value); }catch(e){} countMsg(); });
+  $("addLink").addEventListener("click", () => {
+    const t = $("blastMsg"), link = shopLink();
+    if(!t.value.includes(link)) t.value = (t.value.trim() ? t.value.trim() + " " : "") + link;
+    t.dispatchEvent(new Event("input")); t.focus();
+  });
+  countMsg();
+  /* 10-digit US numbers get +1 so the text goes to the right place */
+  function smsNumber(phone){
+    const d = String(phone || "").replace(/\D/g, "");
+    return d.length === 10 ? "+1" + d : d.length === 11 && d[0] === "1" ? "+" + d : d;
+  }
+  const prettyPhone = p => { const d = String(p).replace(/\D/g, "").slice(-10); return d.length === 10 ? "(" + d.slice(0,3) + ") " + d.slice(3,6) + "-" + d.slice(6) : String(p); };
+  async function loadWaitlist(){
+    waitlist = await run(sb.from("waitlist").select("*").order("signed_up_at", {ascending:false}));
+    renderWaitlist();
+  }
+  function renderWaitlist(){
+    const phones = waitlist.filter(w => w.phone).length, done = waitlist.filter(w => w.last_texted_at || w.last_emailed).length;
+    $("wlCount").textContent = waitlist.length ? waitlist.length + " people · " + phones + " with a phone" : "";
+    /* People not reached yet come first */
+    const rows = waitlist.slice().sort((a, b) => !!(a.last_texted_at || a.last_emailed) - !!(b.last_texted_at || b.last_emailed));
+    $("wlList").innerHTML = rows.length ? rows.map(w => {
+      const reached = w.last_texted_at ? "Texted " + when(w.last_texted_at) : w.last_emailed ? "Emailed " + when(w.last_emailed) : "Signed up " + when(w.signed_up_at);
+      const acts = [];
+      if(w.phone) acts.push('<a class="btn small" href="#" data-text="' + w.id + '">' + (w.last_texted_at ? "Text again" : "Text") + '</a>');
+      if(w.email) acts.push('<a class="btn ghost small" href="#" data-mail="' + w.id + '">Email</a>');
+      acts.push('<button class="btn link small" data-unlist="' + w.id + '" aria-label="Remove from waitlist">Remove</button>');
+      return '<div class="wl' + (w.last_texted_at || w.last_emailed ? " done" : "") + '"><div><b>' + esc(w.phone ? prettyPhone(w.phone) : w.email) + '</b>' +
+        '<small>' + (w.phone && w.email ? esc(w.email) + " · " : "") + esc(reached) + '</small></div><div class="wl-acts">' + acts.join("") + '</div></div>';
+    }).join("") : '<p class="muted">Nobody on the waitlist yet. People join from the shop page when the shop is closed.</p>';
+  }
+  $("wlList").addEventListener("click", async e => {
+    const t = e.target.closest("[data-text]"), m = e.target.closest("[data-mail]"), x = e.target.closest("[data-unlist]");
+    const msg = $("blastMsg").value.trim();
+    if(t || m){
+      const w = waitlist.find(r => r.id == (t || m).dataset[t ? "text" : "mail"]);
+      if(!msg){ e.preventDefault(); toast("Write your message first"); $("blastMsg").focus(); return; }
+      /* Point the link at Messages or Mail with the message filled in; the tap then opens it */
+      if(t) t.href = "sms:" + smsNumber(w.phone) + "?&body=" + encodeURIComponent(msg);
+      else m.href = "mailto:" + encodeURIComponent(w.email) + "?subject=" + encodeURIComponent("Sourdough by Kat") + "&body=" + encodeURIComponent(msg);
+      const col = t ? "last_texted_at" : "last_emailed", now = new Date().toISOString();
+      w[col] = now; setTimeout(renderWaitlist, 600);
+      sb.from("waitlist").update({[col]: now}).eq("id", w.id).then(r => { if(r.error) toast("Couldn't mark as sent: " + r.error.message); });
+      return;
+    }
+    if(x){
+      const w = waitlist.find(r => r.id == x.dataset.unlist);
+      if(!confirm("Remove " + (w.phone ? prettyPhone(w.phone) : w.email) + " from the waitlist? Do this if they ask to stop getting texts.")) return;
+      await run(sb.from("waitlist").delete().eq("id", w.id), "Removed from the waitlist").catch(() => {});
+      loadWaitlist();
+    }
   });
 
   /* ---------- Shop settings ---------- */
